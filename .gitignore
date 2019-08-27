@@ -1,0 +1,14 @@
+# Carpetas
+__pycache__/
+.idea/
+.vscode/
+Features_Extracted/
+Interest_Audios/
+Matlab tests/
+OLD/
+Respiratory_Sound_Database/
+Results/
+useful_audio/
+
+# Archivos
+Resultados.npy

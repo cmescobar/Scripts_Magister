@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.signal import spectrogram
 from python_speech_features import mfcc
+from librosa.feature import mfcc as mfcc_in_segm
+from file_management import get_segmentation_points_by_filename
 
 
 # Descriptores temporales
@@ -100,6 +102,37 @@ def get_mfcc(audio, samplerate, nfft=2048):
     mfcc_vect = mfcc(audio, samplerate, nfft=nfft)
     return mfcc_vect.mean(0)
 
+
+def get_mfcc_by_respiratory_segments(audio, samplerate, symptom, filename):
+    # Se obtiene la lista de puntos de segmentación 
+    list_points = get_segmentation_points_by_filename(symptom, filename)
+
+    # Agregando la primera y la última para tener los intervalos
+    list_points = [0] + list_points + [len(audio)]
+    
+    mfcc_vect = []
+    # Separando por tramos
+    for i in range(1, len(list_points)):
+        # Límites a considerar del audio
+        begin = list_points[i - 1]
+        endls = list_points[i]
+        
+        # Ciclo respiratorio
+        audio_segment = audio[begin:endls]
+        
+        # Obteniendo el MFCC a partir de este segmento
+        mfcc_segment = mfcc_in_segm(audio_segment, sr=samplerate, n_mfcc=13)
+        print(mfcc_segment)
+        exit()
+        
+        # Agregando a la lista
+        mfcc_vect.append(mfcc_segment)
+        
+    # Transformando la lista en matriz
+    print(len(mfcc_vect))
+    print(len(mfcc_vect[0]))
+    exit()
+        
 
 def normalize(X):
     mf = X.mean(0)

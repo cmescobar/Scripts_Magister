@@ -1,5 +1,6 @@
 import os
 import soundfile as sf
+from ast import literal_eval
 
 DIAGNOSIS_CSV = 'Respiratory_Sound_Database/patient_diagnosis.csv'
 AUDIO_FILES = 'Respiratory_Sound_Database/audio_and_txt_files'
@@ -124,8 +125,23 @@ def get_audio_folder_by_symptom(symptom, sep_type='all'):
         print("Re-writing complete!\n")
 
 
+def get_segmentation_points_by_filename(symptom, filename):
+    # Dirección de los puntos originales
+    filepath = f"Results/{symptom}/{symptom}_resp_original_points.txt"
+    # Abriendo el archivo
+    with open(filepath, 'r', encoding='utf8') as file:
+        for i in file:
+            # Obteniendo el nombre
+            name_in_file = i.split(';')[0]
+            if name_in_file == filename:
+                # Se obtiene la lista en texto
+                list_txt = i.split(';')[1].strip()
+                # Transformando a lista
+                return literal_eval(list_txt)
+            
 # Test module
 '''symptom = "Pneumonia"
 get_audio_folder_by_symptom(symptom, sep_type='all')
 get_audio_folder_by_symptom(symptom, sep_type='tracheal')
-get_audio_folder_by_symptom(symptom, sep_type='toracic')'''
+get_audio_folder_by_symptom(symptom, sep_type='toracic')
+get_segmentation_points_by_filename("Healthy")'''

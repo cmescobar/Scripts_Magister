@@ -1,8 +1,10 @@
 import numpy as np
-from scipy.signal import spectrogram
+import matplotlib.pyplot as plt
 from python_speech_features import mfcc
 from librosa.feature import mfcc as mfcc_in_segm
 from file_management import get_segmentation_points_by_filename
+from math_functions import hamming_window
+from scipy.signal import tukey
 
 
 # Descriptores temporales
@@ -94,9 +96,70 @@ def abs_fourier_shift(audio, samplerate, N_rep):
     return frec, fourier_shift
 
 
-def get_spectrogram(audio, samplerate):
-    return spectrogram(audio, samplerate)
-
+def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
+                    window='tukey', plot=False):
+    # Lista donde se almacenará los valores del espectrograma
+    spect = []
+    # Lista de tiempo
+    times = []
+    
+    # Variables auxiliares
+    t = 0   # Tiempo
+    
+    # Seleccionar ventana
+    if window == 'tukey':
+        wind_mask = tukey(N)
+    elif window == 'hamming':
+        wind_mask = hamming_window(N)       
+    
+    # Iteración sobre el audio
+    while audio.any():
+        # Se corta la cantidad de muestras que se necesite, o bien, las que se
+        # puedan cortar
+        if len(audio) >= N:
+            q_samples = N
+            step = int(N * (1 - overlap))
+        else:
+            break
+            # q_samples = step = len(audio)
+            
+        # Recorte en la cantidad de muestras
+        audio_frame = audio[:q_samples]
+        audio = audio[step:]
+               
+        # Ventaneando
+        audio_frame_wind = audio_frame * wind_mask
+        
+        # Aplicando padding
+        audio_padded = np.append(audio_frame_wind, [0] * padding)
+        
+        # Aplicando transformada de fourier
+        mag = 20*np.log10(abs(np.fft.fft(audio_padded))*1/N)
+               
+        # Agregando al vector del espectro
+        spect.append(mag[0:int((N+padding)/2)])
+        
+        # Agregando al vector de tiempo
+        times.append(t)
+        t += step/samplerate
+        
+    # Generar el vector de frecuencias para cada ventana
+    freqs = np.linspace(0, samplerate/2, (N+padding)/2)
+        
+    # Una vez obtenido el spect, se pasa a matriz
+    spect = np.array(spect)
+    
+    # Se plotea
+    if plot:
+        plt.pcolormesh(times, freqs, spect.T)
+        plt.colorbar()
+        plt.ylabel('Frequency [Hz]')
+        plt.xlabel('Time [sec]')
+        plt.show()
+    
+    # Se retornan los valores que permiten construir el 
+    return times, freqs, spect.T
+        
 
 def get_mfcc(audio, samplerate, nfft=2048):
     mfcc_vect = mfcc(audio, samplerate, nfft=nfft)

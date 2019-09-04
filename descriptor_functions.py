@@ -97,7 +97,7 @@ def abs_fourier_shift(audio, samplerate, N_rep):
 
 
 def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
-                    window='tukey', plot=False):
+                    window='tukey', spect_type='abs', plot=False):
     # Lista donde se almacenará los valores del espectrograma
     spect = []
     # Lista de tiempo
@@ -110,7 +110,13 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
     if window == 'tukey':
         wind_mask = tukey(N)
     elif window == 'hamming':
-        wind_mask = hamming_window(N)       
+        wind_mask = hamming_window(N)
+        
+    # Seleccionar tipo de espectrograma
+    if spect_type == 'abs':
+        spect_func = lambda audio: 1/N * abs(np.fft.fft(audio)) #** 2
+    elif spect_type == 'dB':
+        spect_func = lambda audio: 20*np.log10(abs(np.fft.fft(audio))*1/N) 
     
     # Iteración sobre el audio
     while audio.any():
@@ -134,7 +140,7 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
         audio_padded = np.append(audio_frame_wind, [0] * padding)
         
         # Aplicando transformada de fourier
-        mag = 20*np.log10(abs(np.fft.fft(audio_padded))*1/N)
+        mag = spect_func(audio_padded)
                
         # Agregando al vector del espectro
         spect.append(mag[0:int((N+padding)/2)])

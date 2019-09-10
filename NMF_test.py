@@ -11,7 +11,7 @@ from math_functions import wiener_filter
 plot_wh = False
 plot_spect_1 = False
 only_plot = False
-comps_list = [30] #range(10, 500, 20)
+comps_list = [2] #range(10, 500, 20)
 N = 256
 show = False
 
@@ -41,6 +41,9 @@ t, f, v, phase = get_spectrogram(audio_mono, samplerate, N=N, padding=N,
 # Guardar valores de la dimensión del espectrograma
 row_dim, col_dim = v.shape
 
+
+#####-------------- Opciones de ploteo --------------#####
+###
 if plot_wh:
     # Definición de la carpeta a guardar las imágenes
     folder_path = f'NMF_results/WH/{init} - beta_{beta}'\
@@ -119,6 +122,9 @@ for comp in comps_list:
         
         if show:
             plt.show()
+            
+        plt.savefig(f'{folder_path}/{filename}')
+        plt.clf()
 
     if plot_spect_1:
         plt.figure(figsize=(12, 6))
@@ -140,9 +146,10 @@ for comp in comps_list:
         plt.savefig(f'{folder_path}/{filename}')
         plt.clf()
 
+    print(f'¡Plot successfull!\n')
+    
     # Preguntar si es que solo se quiere plottear
     if only_plot:
-        print(f'¡Plot successfull!\n')
         continue
 
     # Definición de una lista que almacene los resultados de la separación de

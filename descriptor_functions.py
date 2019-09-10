@@ -4,7 +4,7 @@ from python_speech_features import mfcc
 from librosa.feature import mfcc as mfcc_in_segm
 from file_management import get_segmentation_points_by_filename
 from math_functions import hamming_window
-from scipy.signal import tukey
+from scipy.signal.windows import tukey
 
 
 # Descriptores temporales

@@ -94,3 +94,16 @@ def recognize_peaks_by_derivates(x, signal, peak_type='min', tol_dx=0.01,
         plt.show()
 
     return out_indexes
+
+
+def wiener_filter(V, WiHi, W, H, alpha=1):
+    # El filtro de Wiener permite generar una máscara que obtenga información
+    # del espectrograma original a partir de la proporción obtenida mediante la
+    # multiplicación de las matrices W y H (estimación de la señal original)
+    
+    # Obteniendo la máscara
+    mask = np.divide(WiHi ** alpha, np.matmul(W, H))
+    
+    # Aplicando la máscara al espectrograma original, se obtiene el resultado
+    # final del proceso de separación de fuentes
+    return mask * V

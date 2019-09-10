@@ -99,7 +99,8 @@ def abs_fourier_shift(audio, samplerate, N_rep):
 def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
                     window='tukey', spect_type='abs', plot=False):
     # Lista donde se almacenará los valores del espectrograma
-    spect = []
+    spect_mag = []
+    spect_pha = []
     # Lista de tiempo
     times = []
     
@@ -114,9 +115,9 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
         
     # Seleccionar tipo de espectrograma
     if spect_type == 'abs':
-        spect_func = lambda audio: 1/N * abs(np.fft.fft(audio)) #** 2
+        mag_func = lambda audio: 1/N * abs(audio) #** 2
     elif spect_type == 'dB':
-        spect_func = lambda audio: 20*np.log10(abs(np.fft.fft(audio))*1/N) 
+        mag_func = lambda audio: 20*np.log10(abs(audio)*1/N) 
     
     # Iteración sobre el audio
     while audio.any():
@@ -140,10 +141,15 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
         audio_padded = np.append(audio_frame_wind, [0] * padding)
         
         # Aplicando transformada de fourier
-        mag = spect_func(audio_padded)
+        audio_fft = np.fft.fft(audio_padded)
+        
+        # Calculando la magntiud y fase 
+        mag = mag_func(audio_fft)
+        pha = np.angle(audio_fft)
                
-        # Agregando al vector del espectro
-        spect.append(mag[0:int((N+padding)/2)])
+        # Agregando a los vectores del espectro
+        spect_mag.append(mag[0:int((N+padding)/2)])
+        spect_pha.append(pha[0:int((N+padding)/2)])
         
         # Agregando al vector de tiempo
         times.append(t)
@@ -152,19 +158,34 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
     # Generar el vector de frecuencias para cada ventana
     freqs = np.linspace(0, samplerate/2, (N+padding)/2)
         
-    # Una vez obtenido el spect, se pasa a matriz
-    spect = np.array(spect)
+    # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
+    spect_mag = np.array(spect_mag)
+    spect_pha = np.array(spect_pha)
     
     # Se plotea
     if plot:
-        plt.pcolormesh(times, freqs, spect.T)
+        plt.pcolormesh(times, freqs, spect_mag.T)
         plt.colorbar()
         plt.ylabel('Frequency [Hz]')
         plt.xlabel('Time [sec]')
         plt.show()
     
     # Se retornan los valores que permiten construir el 
-    return times, freqs, spect.T
+    return times, freqs, spect_mag.T, spect_pha.T
+
+
+def get_inverse_spectrogram(X):
+    # Obtener la dimensión de la matriz
+    _, col = X.shape
+    
+    # Definición de una lista en la que se almacena la transformada inversa
+    inv_spect = []
+    
+    # Transformando columna a columna
+    for i in range(col):
+        inv_spect += list(np.fft.ifft(X[:, i]))
+        
+    return inv_spect
         
 
 def get_mfcc(audio, samplerate, nfft=2048):

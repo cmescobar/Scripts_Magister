@@ -5,10 +5,10 @@ __pycache__/
 Features_Extracted/
 Interest_Audios/
 Matlab tests/
-OLD/
 Respiratory_Sound_Database/
 Results/
 useful_audio/
+NMF_results/
 
 # Archivos
 Resultados.npy

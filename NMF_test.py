@@ -11,14 +11,14 @@ from math_functions import wiener_filter
 plot_wh = False
 plot_spect_1 = False
 only_plot = False
-comps_list = [3] #range(10, 500, 20)
+comps_list = [30] #range(10, 500, 20)
 N = 256
 show = False
 
 tol = 1e-4
 maxiter = 500
 init = 'random'   # random, custom_basic, custom_spect
-beta = 'itakura-saito'
+beta = 1
 
 
 
@@ -93,20 +93,9 @@ for comp in comps_list:
     elif init == 'custom_spect':
         # Se obtiene la media en el tiempo de la transformada de Fourier...
         init_value = np.array([v.mean(1)]).T
+        
         # Para tener un valor inicial del espectrograma
         W_0 = np.tile(init_value, comp)
-        
-        '''plt.subplot(1, 2, 1)
-        plt.pcolormesh(t, f, 10*np.log10(v))
-        plt.colorbar()
-        plt.ylabel('Frequency [Hz]')
-        plt.xlabel('Time [sec]')
-        
-        plt.subplot(1, 2, 2)
-        plt.pcolormesh(range(comp), f, 10*np.log10(W_0))
-        plt.colorbar()
-        plt.xlabel('Time [sec]')
-        plt.show()'''
         
         # Mientras que la matriz de activaciones temporales se inicializa en 0.5
         H_0 = np.zeros((comp, col_dim)) + 0.5
@@ -119,9 +108,6 @@ for comp in comps_list:
         W = model.fit_transform(v)
         
     H = model.components_
-
-    # print(W.shape)
-    # print(H.shape)
 
     if plot_wh:
         for i in range(comp):
@@ -191,10 +177,14 @@ for comp in comps_list:
         
         # Pasando a audio
         audio_filename = f'{audio_path}/Component_{i+1}.wav'
+        print(audio_filename)
         sf.write(audio_filename, audio_j, samplerate)
         
         # Agregando la máscara a la lista
         sources.append(source_i)
         # Y el audio
         audio.append(audio_j)
+        
+        print(f'Componente {i} completa')
+
     

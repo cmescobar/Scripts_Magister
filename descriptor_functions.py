@@ -174,16 +174,22 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
     return times, freqs, spect_mag.T, spect_pha.T
 
 
-def get_inverse_spectrogram(X):
+def get_inverse_spectrogram(X, window='tukey'):
     # Obtener la dimensión de la matriz
-    _, col = X.shape
+    rows, cols = X.shape
+    
+    # Seleccionar ventana
+    if window == 'tukey':
+        wind_mask = tukey(rows)
+    elif window == 'hamming':
+        wind_mask = hamming_window(rows) 
     
     # Definición de una lista en la que se almacena la transformada inversa
     inv_spect = []
     
     # Transformando columna a columna
-    for i in range(col):
-        inv_spect += list(np.fft.ifft(X[:, i]))
+    for i in range(cols):
+        inv_spect += list(wind_mask * np.fft.ifft(X[:, i]))
         
     return inv_spect
         

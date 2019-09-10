@@ -13,7 +13,7 @@ plot_spect_1 = False
 only_plot = False
 comps_list = [2] #range(10, 500, 20)
 N = 256
-show = False
+show = True
 
 tol = 1e-4
 maxiter = 500
@@ -175,6 +175,7 @@ for comp in comps_list:
         # Aplicando la fase al espectrograma obtenido después de el filtro de
         # wiener 
         Yj = wiener_out * np.exp(1j*phase)
+        Yj = source_i * np.exp(1j*phase)
         
         # Aplicando transformada inversa: OJOOOOO!!
         audio_j = get_inverse_spectrogram(Yj)

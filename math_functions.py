@@ -9,6 +9,13 @@ def hamming_window(N):
                        for i in range(int(N))])
 
 
+def hann_window(N):
+    # Definición de la ventana hamming de modo que se pueda generar para un
+    # largo de ventana definido
+    return np.asarray([0.5 - 0.5*np.cos((2*np.pi*i)/N)
+                       for i in range(int(N))])
+
+
 def recognize_peaks_by_derivates(x, signal, peak_type='min', tol_dx=0.01,
     tol_d2x=1e-2, lookup=1500, plot=False):
     # Se definen las derivadas 
@@ -102,7 +109,7 @@ def wiener_filter(V, WiHi, W, H, alpha=1):
     # multiplicación de las matrices W y H (estimación de la señal original)
     
     # Obteniendo la máscara
-    mask = np.divide(WiHi ** alpha, np.matmul(W, H))
+    mask = np.divide(WiHi ** alpha, np.matmul(W, H) + 1e-15)
     
     # Aplicando la máscara al espectrograma original, se obtiene el resultado
     # final del proceso de separación de fuentes

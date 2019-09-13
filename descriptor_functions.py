@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from python_speech_features import mfcc
 from librosa.feature import mfcc as mfcc_in_segm
 from file_management import get_segmentation_points_by_filename
-from math_functions import hamming_window
-from scipy.signal.windows import tukey
+from math_functions import hamming_window, hann_window
+from scipy.signal.windows import tukey, nuttall
 
 
 # Descriptores temporales
@@ -96,11 +96,10 @@ def abs_fourier_shift(audio, samplerate, N_rep):
     return frec, fourier_shift
 
 
-def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
-                    window='tukey', spect_type='abs', plot=False):
+def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0, 
+                    window='tukey', whole=False):
     # Lista donde se almacenará los valores del espectrograma
-    spect_mag = []
-    spect_pha = []
+    spect = []
     # Lista de tiempo
     times = []
     
@@ -112,12 +111,12 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
         wind_mask = tukey(N)
     elif window == 'hamming':
         wind_mask = hamming_window(N)
-        
-    # Seleccionar tipo de espectrograma
-    if spect_type == 'abs':
-        mag_func = lambda audio: 1/N * abs(audio) #** 2
-    elif spect_type == 'dB':
-        mag_func = lambda audio: 20*np.log10(abs(audio)*1/N) 
+    elif window == 'hann':
+        wind_mask = hann_window(N)
+    elif window == 'nuttall':
+        wind_mask = nuttall(N)
+    elif window is None:
+        wind_mask = np.array([1] * N)
     
     # Iteración sobre el audio
     while audio.any():
@@ -142,39 +141,48 @@ def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0,
         
         # Aplicando transformada de fourier
         audio_fft = np.fft.fft(audio_padded)
-        
-        # Calculando la magntiud y fase 
-        mag = mag_func(audio_fft)
-        pha = np.angle(audio_fft)
                
         # Agregando a los vectores del espectro
-        spect_mag.append(mag[0:int((N+padding)/2)])
-        spect_pha.append(pha[0:int((N+padding)/2)])
+        spect.append(audio_fft)
         
         # Agregando al vector de tiempo
         times.append(t)
         t += step/samplerate
-        
-    # Generar el vector de frecuencias para cada ventana
-    freqs = np.linspace(0, samplerate/2, (N+padding)/2)
-        
-    # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
-    spect_mag = np.array(spect_mag)
-    spect_pha = np.array(spect_pha)
     
-    # Se plotea
-    if plot:
-        plt.pcolormesh(times, freqs, spect_mag.T)
-        plt.colorbar()
-        plt.ylabel('Frequency [Hz]')
-        plt.xlabel('Time [sec]')
-        plt.show()
+    # Preguntar si se quiere el espectro completo, o solo la mitad (debido a
+    # que está reflejado hermitianamente)
+    if whole:
+        # Generar el vector de frecuencias para cada ventana
+        freqs = np.linspace(0, samplerate, N+padding)
+
+        # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
+        spect = np.array(spect, dtype=np.complex64)
+    else:
+        # Generar el vector de frecuencias para cada ventana
+        freqs = np.linspace(0, samplerate//2, (N+padding)//2 + 1)
+
+        # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
+        spect = np.array(spect, dtype=np.complex64)[:, :(N+padding)//2 + 1]
     
-    # Se retornan los valores que permiten construir el 
-    return times, freqs, spect_mag.T, spect_pha.T
+    # Se retornan los valores que permiten construir el espectrograma 
+    # correspondiente
+    return times, freqs, spect.T
 
 
-def get_inverse_spectrogram(X, window='tukey'):
+def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
+    # Preguntar si es que la señal está en el rango 0-samplerate. En caso de 
+    # que no sea así, se debe concatenar el conjugado de la señal para 
+    # recuperar el espectro. Esto se hace así debido a la propiedad de las 
+    # señales reales que dice que la FT de una señal real entrega una señal 
+    # hermitiana (parte real par, parte imaginaria impar). Luego, como solo 
+    # tenemos la mitad de la señal, la otra parte correspondiente a la señal 
+    # debiera ser la misma pero conjugada, para que al transformar esta señal 
+    # hermitiana mediante la IFT, se recupere una señal real (correspondiente a 
+    # la señal de audio).
+    if not whole:
+        # Se refleja lo existente utilizando el conjugado
+        X = np.concatenate((X, np.flip(np.conj(X[1:-1, :]), axis=0)))
+        
     # Obtener la dimensión de la matriz
     rows, cols = X.shape
     
@@ -182,16 +190,42 @@ def get_inverse_spectrogram(X, window='tukey'):
     if window == 'tukey':
         wind_mask = tukey(rows)
     elif window == 'hamming':
-        wind_mask = hamming_window(rows) 
+        wind_mask = hamming_window(rows)
+    elif window == 'hann':
+        wind_mask = hann_window(rows)
+    elif window == 'nuttall':
+        wind_mask = nuttall(rows)
+    elif window is None:
+        wind_mask = np.array([1] * rows)
+        
+    # A partir del overlap, el tamaño de cada ventana de la fft (dimensión fila)
+    # y la cantidad de frames a las que se les aplicó la transformación 
+    # (dimensión columna), se define la cantidad de muestras que representa la
+    # señal original
+    step = int(rows * (1 - overlap))      # Tamaño del paso
+    total_samples = step * cols + rows    # Tamaño total del arreglo
     
     # Definición de una lista en la que se almacena la transformada inversa
-    inv_spect = []
+    inv_spect = np.zeros((total_samples,), dtype=np.complex128)
+    # Definición de una lista de suma de ventanas cuadráticas en el tiempo
+    sum_wind2 = np.zeros((total_samples,), dtype=np.complex128)
     
-    # Transformando columna a columna
+    # Transformando columna a columna (nótese la división en tiempo por una 
+    # ventana definida)
     for i in range(cols):
-        inv_spect += list(wind_mask * np.fft.ifft(X[:, i]))
+        beg = i * step
+        # Se multiplica por el kernel para la reconstrucción a partir de la
+        # ventana aplicada inicialmente. Fuente:
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.istft.html
+        inv_spect[beg:beg+rows] += np.fft.ifft(X[:, i]) * wind_mask
         
-    return inv_spect
+        # Se suma la ventana al cuadrado (que sirve como ponderador)
+        sum_wind2[beg:beg+rows] += wind_mask ** 2
+    
+    # Finalmente se aplica la normalización por la cantidad de veces que se
+    # suma cada muestra en el proceso anterior producto del traslape,
+    # utilizando las ventanas correspondientes
+    return np.divide(inv_spect, sum_wind2 + 1e-15)
         
 
 def get_mfcc(audio, samplerate, nfft=2048):

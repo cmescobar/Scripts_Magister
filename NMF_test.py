@@ -72,10 +72,6 @@ if plot_components:
     if not os.path.isdir(folder_path_comps):
         os.makedirs(folder_path_comps)
 
-if reconstruct:
-    if not os.path.isdir(folder_path_audios):
-        os.makedirs(folder_path_audios)
-
 
 
 #####-------------- Rutina --------------#####
@@ -154,10 +150,10 @@ for n_nmf in comps_list:
         plt.xlabel('Time [sec]')
         
         # Guardando el archivo
-        plt.savefig(f'{folder_path_wh}/{filename}.png')
+        plt.savefig(f'{folder_path_wh}/{n_nmf}_comps {filename}.png')
         plt.clf()
         
-        print('Plot complete!')
+        print('Plot complete!\n')
     
     # Preguntar si se busca reconstruir por componentes
     if reconstruct:
@@ -182,9 +178,16 @@ for n_nmf in comps_list:
             # Pasando a 64 bits
             y_i = np.float64(np.real(y_i))
             
+            
+            folder_to_rec = f'{folder_path_audios}/{n_nmf} Components'
+            if not os.path.isdir(folder_to_rec):
+                os.makedirs(folder_to_rec)
+            
             # Guardando el archivo
-            sf.write(f'{folder_path_audios}/Component_{i}.wav',
+            sf.write(f'{folder_to_rec}/Component_{i}.wav',
                      y_i, samplerate)
         
-        print('Components complete!')
-            
+        print('Components complete!\n')
+          
+    
+    print(f'{"-"* 20}\n')  

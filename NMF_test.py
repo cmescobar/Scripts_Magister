@@ -6,6 +6,10 @@ from sklearn.decomposition import NMF
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 from math_functions import wiener_filter
 
+# Definición del comentario de la corrida
+comment = ' - ' + 'Corrida haciendo aleatorio W y H manualmente'
+
+
 
 #####-------------- Opciones de simulación --------------#####
 
@@ -21,20 +25,22 @@ window = 'hann'         # 'hann', 'tukey', 'hamming', 'nuttall', None
 whole = False
 
 # Opciones de nmf
-comps_list = range(2, 100)
+comps_list = range(10, 500, 5)
 tol = 1e-4
 maxiter = 500
-init = 'random'         # random, custom_basic, custom_spect
+init_op = 'random_man'  # random_auto, random_man, custom_basic, custom_spect
+seed_value = 100        # Para el random_man
 beta = 2
-solver = 'cd'
+solver = 'mu'
 
 # Opciones de reconstrucción
 apply_wiener = False
-reconstruct = True
+reconstruct = False
 
 # Opciones de salida
 plot_mult_wh = True
 plot_components = False
+
 
 
 #####-------------- Nombres carpetas y archivos --------------#####
@@ -42,7 +48,6 @@ if op == "1":
     track = 'Drums'
 elif op == "2":
     track = "Test_1"
-
 
 # Definición del nombre del archivo
 if apply_wiener:
@@ -52,11 +57,21 @@ else:
     filename = f'N_{N} ov_{int(overlap*100)} window_{window} tol_{tol} '\
                f'maxiter_{maxiter} solver_{solver}'
 
+# Agregar valor de la semilla si es que es random manual
+if init_op == 'random_man':
+    filename += f' seed_{seed_value}'
+
 # Nombres de carpetas
-folder_path_wh = f'NMF_results/{track}/WH_comparison/{init} beta_{beta}'
-folder_path_comps = f'NMF_results/{track}/Components/{init} beta_{beta}'
-folder_path_audios = f'NMF_results/{track}/Audios/{init} beta_{beta}/'\
+folder_path_wh = f'NMF_results/{track}/WH_comparison/{init_op} beta_{beta}'
+folder_path_comps = f'NMF_results/{track}/Components/{init_op} beta_{beta}'
+folder_path_audios = f'NMF_results/{track}/Audios/{init_op} beta_{beta}/'\
                      f'{filename}'
+
+# A cada una de las carpetas se le agrega también el comentario de cada corrida
+# (para tener en consideración qué es lo que el investigador quizo hacer)
+folder_path_wh += f' {comment}'
+folder_path_comps += f' {comment}'
+folder_path_audios += f' {comment}'
 
 
 
@@ -100,6 +115,13 @@ t, f, S = get_spectrogram(audio_mono, samplerate, N=N, padding=0,
 
 # Trabajaremos con la magnitud del espectrograma
 X = np.abs(S)
+
+# Transformación de opción de inicio
+if 'random' != init_op:
+    init = 'custom'
+else:
+    init = init_op
+
 # Aplicando NMF a cada una de las componentes
 for n_nmf in comps_list:
     print(f'Calculating NMF with {n_nmf} components...')
@@ -108,15 +130,42 @@ for n_nmf in comps_list:
                 tol=tol, max_iter=maxiter)
     
     # Ajustando para obtener W y H
-    if init == 'random':
-        W = model.fit(X)
-    elif init == 'custom':
-        # Se definen de manera previa puntos de inicio
+    if init_op == 'random_auto':
+        model.fit(X)
+        
+    elif init_op == 'random_man':
+        # Se define de manera previa puntos de inicio
+        np.random.seed(seed_value)
+        W_0 = np.random.rand(X.shape[0], n_nmf)
+        H_0 = np.ones((n_nmf, X.shape[1]))
+        
+        # Ajustando
+        model.fit(X, W=W_0, H=H_0)
+    
+    elif init_op == 'custom_basic':
+        # Se definen de manera previa puntos de inicio (solo 1's)
         W_0 = np.ones((X.shape[0], n_nmf))
         H_0 = np.ones((n_nmf, X.shape[1]))
         
-        # Se transforma
-        W = model.fit(X, W=W_0, H=H_0)
+        # Ajustando
+        model.fit(X, W=W_0, H=H_0)
+    
+    elif init_op == 'custom_spect':
+        # Se obtiene un promedio temporal del espectro a través del tiempo
+        mean_spect = np.array([X.mean(axis=1)]).T
+        
+        # Luego se define W_0 como la repetición de este promedio
+        W_0 = np.tile(mean_spect, n_nmf)
+        H_0 = np.ones((n_nmf, X.shape[1]))
+        
+        # Ajustando
+        model.fit(X, W=W_0, H=H_0)
+        
+    else:
+        print('Opción de inicio de NMF incorrecta. Por favor, intente '
+              'nuevamente')
+        exit()
+        
     
     # Se obtiene el W y H a partir de lo calculado anteriormente
     W = model.transform(X)
@@ -152,6 +201,7 @@ for n_nmf in comps_list:
         # Guardando el archivo
         plt.savefig(f'{folder_path_wh}/{n_nmf}_comps {filename}.png')
         plt.clf()
+        plt.close()
         
         print('Plot complete!\n')
     
@@ -190,4 +240,6 @@ for n_nmf in comps_list:
         print('Components complete!\n')
           
     
-    print(f'{"-"* 20}\n')  
+    print(f'{"-" * 40}\n')
+    
+    

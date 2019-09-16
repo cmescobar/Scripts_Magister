@@ -7,7 +7,7 @@ from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 from math_functions import wiener_filter
 
 # Definición del comentario de la corrida
-comment = ' - ' + 'Corrida haciendo aleatorio W y H manualmente'
+comment = ' - ' + 'Corrida aleatoria del comando NMF'
 
 
 
@@ -25,13 +25,15 @@ window = 'hann'         # 'hann', 'tukey', 'hamming', 'nuttall', None
 whole = False
 
 # Opciones de nmf
-comps_list = range(10, 500, 5)
+comps_list = range(10, 101, 10)
 tol = 1e-4
 maxiter = 500
-init_op = 'random_man'  # random_auto, random_man, custom_basic, custom_spect
+init_op = 'random_auto' # random_auto, random_man, custom_basic, custom_spect
 seed_value = 100        # Para el random_man
 beta = 2
 solver = 'mu'
+alpha = 1
+l1_ratio = 1
 
 # Opciones de reconstrucción
 apply_wiener = False
@@ -52,10 +54,11 @@ elif op == "2":
 # Definición del nombre del archivo
 if apply_wiener:
     filename = f'[Wiener filter] N_{N} ov_{int(overlap*100)} window_{window} '\
-               f'tol_{tol} maxiter_{maxiter} solver_{solver}'
+               f'tol_{tol} maxiter_{maxiter} solver_{solver} alpha_{alpha} l1_'\
+               f'{l1_ratio}'
 else:
     filename = f'N_{N} ov_{int(overlap*100)} window_{window} tol_{tol} '\
-               f'maxiter_{maxiter} solver_{solver}'
+               f'maxiter_{maxiter} solver_{solver} alpha_{alpha} l1_{l1_ratio}'
 
 # Agregar valor de la semilla si es que es random manual
 if init_op == 'random_man':
@@ -117,17 +120,17 @@ t, f, S = get_spectrogram(audio_mono, samplerate, N=N, padding=0,
 X = np.abs(S)
 
 # Transformación de opción de inicio
-if 'random' != init_op:
+if 'random_auto' != init_op:
     init = 'custom'
 else:
-    init = init_op
+    init = 'random'
 
 # Aplicando NMF a cada una de las componentes
 for n_nmf in comps_list:
     print(f'Calculating NMF with {n_nmf} components...')
     
     model = NMF(n_components=n_nmf, init=init, solver=solver, beta_loss=beta,
-                tol=tol, max_iter=maxiter)
+                tol=tol, max_iter=maxiter, alpha=alpha, l1_ratio=l1_ratio)
     
     # Ajustando para obtener W y H
     if init_op == 'random_auto':
@@ -136,8 +139,10 @@ for n_nmf in comps_list:
     elif init_op == 'random_man':
         # Se define de manera previa puntos de inicio
         np.random.seed(seed_value)
+        # Cabe destacar que una vez invocada la semilla, tanto el W_0 y H_0 
+        # tomarán siempre los mismos valores
         W_0 = np.random.rand(X.shape[0], n_nmf)
-        H_0 = np.ones((n_nmf, X.shape[1]))
+        H_0 = np.random.rand(n_nmf, X.shape[1])
         
         # Ajustando
         model.fit(X, W=W_0, H=H_0)

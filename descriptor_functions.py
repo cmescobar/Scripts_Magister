@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 from python_speech_features import mfcc
 from librosa.feature import mfcc as mfcc_in_segm
 from file_management import get_segmentation_points_by_filename
-from math_functions import hamming_window, hann_window
+from math_functions import hamming_window, hann_window, wiener_filter
 from scipy.signal.windows import tukey, nuttall
+from sklearn.decomposition import NMF
 
 
 # Descriptores temporales
@@ -228,6 +229,80 @@ def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
     return np.divide(inv_spect, sum_wind2 + 1e-15)
 
 
+def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0, 
+                       window='hamming', wiener_filt=True, alpha_wie=1,
+                       n_components=2, init='random', solver='mu', beta=2,
+                       tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                       W_0=None, H_0=None, whole=False):
+    '''Función que a partir del archivo de audio (ingresado en la variable 
+    "audio") transforma los datos en un espectrograma con traslape dado por 
+    la variable "overlap" (0 para no tener traslape y 0.99 para 99% de 
+    traslape) y una cantidad de "padding" puntos.
+
+    Esta transformación además usa ventanas definidas por la variable "window", 
+    que puede variar entre "tukey", "hamming", "hann", "nuttall" y sin ventana 
+    (None).
+    
+    Además utiliza todos los parámetros relevantes para este estudio del comando
+    NMF programado en la librería sklearn, disponible en:
+    https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.NMF.html
+    
+    Finalmente, presenta la opción de aplicar un filtro de Wiener al resultado 
+    de las matrices obtenidas mediante NMF, utilizando la variable booleana 
+    "wiener_filt", y calibrando el valor de alpha propio de la máscara mediante 
+    la variable "alpha_wie".'''
+    
+    # Propiedad del overlap
+    overlap = 0.99 if overlap > 0.99 else overlap
+    
+    # Definición de una lista que almacene las componentes
+    components = []
+    # Listas de valores de interés
+    Y_list = []
+    
+    # Obteniendo el espectrograma
+    _, _, S = get_spectrogram(audio, samplerate, N=N, padding=padding, 
+                              overlap=overlap, window=window, whole=whole)
+    
+    # Definiendo la magnitud
+    X = np.abs(S)
+    
+    # Definiendo el modelo de NMF
+    model = NMF(n_components=n_components, init=init, solver=solver,
+                beta_loss=beta, tol=tol, max_iter=max_iter, alpha=alpha_nmf,
+                l1_ratio=l1_ratio)
+    
+    # Ajustando
+    W = model.fit_transform(X)
+    H = model.components_
+    
+    # Se define la función de transformación para Yi
+    if wiener_filt:
+        # Se aplica filtro de Wiener
+        filt = lambda source_i: wiener_filter(X, source_i, W, H, 
+                                              alpha=alpha_wie)
+    else:
+        # Solo se entrega la multiplicación W_i * H_i
+        filt = lambda source_i: source_i
+    
+    # Obteniendo las fuentes
+    for i in range(n_components):
+        source_i = np.outer(W[:,i], H[i])
+        
+        # Aplicando el filtro
+        Yi = filt(source_i) * np.exp(1j * np.angle(S))
+        
+        # Y posteriormente la transformada inversa
+        yi = get_inverse_spectrogram(Yi, overlap=overlap, window=window, 
+                                     whole=whole)
+        
+        # Agregando a la lista de componentes
+        components.append(yi)
+        Y_list.append(Yi)
+        
+    return np.array(components), X, np.array(Y_list), W, H
+
+
 def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0, 
                                overlap=0.75, window='hann', n_components=2,
                                alpha_wiener=1):
@@ -243,7 +318,6 @@ def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0,
     sum_wind2 = np.zeros((len(audio, )), dtype=np.complex128) 
     
     # Variables auxiliares
-    t = 0   # Tiempo
     audio_ind = 0  # Indice de audio para suma de componentes
     
     # Seleccionar ventana

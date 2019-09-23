@@ -226,7 +226,100 @@ def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
     # suma cada muestra en el proceso anterior producto del traslape,
     # utilizando las ventanas correspondientes
     return np.divide(inv_spect, sum_wind2 + 1e-15)
+
+
+def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0, 
+                               overlap=0.75, window='hann', n_components=2,
+                               alpha_wiener=1):
+    # A partir del overlap, el tamaño de cada ventana de la fft (dimensión fila)
+    # y la cantidad de frames a las que se les aplicó la transformación
+    # (dimensión columna), se define la cantidad de muestras que representa la
+    # señal original
+    step = int(N * (1 - overlap))      # Tamaño del paso    
+    
+    # Lista donde se almacenará los valores del espectrograma
+    source_array = np.zeros((n_components, len(audio)), dtype=np.complex128)
+    # Lista de suma de ventanas cuadráticas en el tiempo
+    sum_wind2 = np.zeros((len(audio, )), dtype=np.complex128) 
+    
+    # Variables auxiliares
+    t = 0   # Tiempo
+    audio_ind = 0  # Indice de audio para suma de componentes
+    
+    # Seleccionar ventana
+    if window == 'tukey':
+        wind_mask = tukey(N)
+    elif window == 'hamming':
+        wind_mask = hamming_window(N)
+    elif window == 'hann':
+        wind_mask = hann_window(N)
+    elif window == 'nuttall':
+        wind_mask = nuttall(N)
+    elif window is None:
+        wind_mask = np.array([1] * N)
+    
+    # Iteración sobre el audio
+    while audio.any():
+        # Se corta la cantidad de muestras que se necesite, o bien, las que se
+        # puedan cortar
+        if not len(audio) >= N:
+            # Se corta acá si es que se llega al límite (final se corta)
+            break    
+            
+        # Recorte en la cantidad de muestras
+        audio_frame = audio[:N]
+        audio = audio[step:]
+               
+        # Ventaneando
+        frame_windowed = audio_frame * wind_mask
         
+        # Aplicando padding
+        frame_padded = np.append(frame_windowed, [0] * padding)
+        
+        # Aplicando transformada de fourier
+        frame_fft = np.fft.fft(frame_padded)
+        
+        # Obteniendo la magnitud y fase, y dejando solo la mitad útil
+        frame_mag = np.abs(frame_fft)[:N//2+1]
+        frame_pha = np.angle(frame_fft)[:N//2+1]
+        
+        # A este frame ventaneado se le aplica NMF
+        model = NMF(n_components=n_components)
+        W = model.fit_transform(np.array([frame_mag]))
+        H = model.components_
+        
+        # Obteniendo las fuentes a partir de las componentes
+        for i in range(n_components):
+            WiHi = np.outer(W[:,i], H[i])
+
+            # Aplicando el filtro de Wiener
+            Yi = wiener_filter(frame_mag, WiHi, W, H, alpha=alpha_wiener) *\
+                    np.exp(1j * frame_pha)
+            
+            # Transponiendo la información
+            Yi = Yi.T
+            
+            # Se refleja lo existente utilizando el conjugado
+            Yi = np.concatenate((Yi, np.flip(np.conj(Yi[1:-1]))), axis=0)
+            
+            # Obteniendo la transformada inversa (se multiplica también por la 
+            # ventana para desventanear)
+            yi = np.array(np.fft.ifft(Yi[:,0])) * wind_mask
+            
+            # Sumando al arreglo la transformada inversa
+            source_array[i, audio_ind:audio_ind+N] += yi
+            
+        # Sumando la ventana al cuadrado (que sirve como ponderador temporal)
+        sum_wind2[audio_ind:audio_ind+N] += wind_mask ** 2 
+        
+        # Agregando al vector de tiempo
+        audio_ind += step
+
+    # Finalmente se aplica la normalización por la cantidad de veces que se 
+    # suma cada muestra en el proceso anterior producto del traslape, 
+    # utilizando las ventanas correspondientes
+    return np.real(np.divide(source_array, sum_wind2 + 1e-15))
+
 
 def get_mfcc(audio, samplerate, nfft=2048):
     mfcc_vect = mfcc(audio, samplerate, nfft=nfft)

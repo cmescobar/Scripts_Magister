@@ -97,7 +97,7 @@ def abs_fourier_shift(audio, samplerate, N_rep):
     return frec, fourier_shift
 
 
-def get_spectrogram(audio, samplerate, N=512, padding=512, overlap=0, 
+def get_spectrogram(audio, samplerate, N=512, padding=0, overlap=0, 
                     window='tukey', whole=False):
     # Lista donde se almacenará los valores del espectrograma
     spect = []
@@ -233,7 +233,7 @@ def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0,
                        window='hamming', wiener_filt=True, alpha_wie=1,
                        n_components=2, init='random', solver='mu', beta=2,
                        tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
-                       W_0=None, H_0=None, whole=False):
+                       random_state=100, W_0=None, H_0=None, whole=False):
     '''Función que a partir del archivo de audio (ingresado en la variable 
     "audio") transforma los datos en un espectrograma con traslape dado por 
     la variable "overlap" (0 para no tener traslape y 0.99 para 99% de 
@@ -253,7 +253,7 @@ def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0,
     la variable "alpha_wie".'''
     
     # Propiedad del overlap
-    overlap = 0.99 if overlap > 0.99 else overlap
+    overlap = 0.99 if overlap >= 0.99 else overlap
     
     # Definición de una lista que almacene las componentes
     components = []
@@ -261,19 +261,22 @@ def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0,
     Y_list = []
     
     # Obteniendo el espectrograma
-    _, _, S = get_spectrogram(audio, samplerate, N=N, padding=padding, 
+    t, f, S = get_spectrogram(audio, samplerate, N=N, padding=padding, 
                               overlap=overlap, window=window, whole=whole)
     
-    # Definiendo la magnitud
+    # Definiendo la magnitud del espectrograma (elemento a estimar)
     X = np.abs(S)
     
     # Definiendo el modelo de NMF
     model = NMF(n_components=n_components, init=init, solver=solver,
-                beta_loss=beta, tol=tol, max_iter=max_iter, alpha=alpha_nmf,
-                l1_ratio=l1_ratio)
+                beta_loss=beta, tol=tol, max_iter=max_iter, random_state=random_state, alpha=alpha_nmf, l1_ratio=l1_ratio)
     
     # Ajustando
-    W = model.fit_transform(X)
+    if init == 'random':
+        W = model.fit_transform(X)
+    else:
+        W = model.fit_transform(X, W=W_0, H=H_0)
+        
     H = model.components_
     
     # Se define la función de transformación para Yi
@@ -297,10 +300,10 @@ def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0,
                                      whole=whole)
         
         # Agregando a la lista de componentes
-        components.append(yi)
+        components.append(np.real(yi))
         Y_list.append(Yi)
         
-    return np.array(components), X, np.array(Y_list), W, H
+    return np.array(components), t, f, X, np.array(Y_list), W, H
 
 
 def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0, 

@@ -14,3 +14,7 @@ NMF_results/
 Resultados.npy
 Testing_modules/Piano_Sax.wav
 Testing_modules/Test_1.wav
+
+# Archivos en comp test
+Comp_tests/*.npz
+Comp_tests/*.lp

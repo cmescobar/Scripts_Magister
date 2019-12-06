@@ -16,5 +16,9 @@ Testing_modules/Piano_Sax.wav
 Testing_modules/Test_1.wav
 
 # Archivos en comp test
-Comp_tests/*.npz
-Comp_tests/*.lp
+Compressed_sensing_tests/*.npz
+Compressed_sensing_tests/*.lp
+
+# Archivos en Entropy test
+Entropy_test/*.npz
+Entropy_test/Drums_zanark_*/

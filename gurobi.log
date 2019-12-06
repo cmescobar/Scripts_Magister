@@ -1,0 +1,53 @@
+
+Gurobi 8.1.1 (win64, Python) logging started 10/17/19 18:14:33
+
+Academic license - for non-commercial use only
+Warning for adding constraints: zero or small (< 1e-13) coefficients, ignored
+Optimize a model with 359101 rows, 401 columns and 114011400 nonzeros
+Variable types: 1 continuous, 400 integer (400 binary)
+Coefficient statistics:
+  Matrix range     [1e-13, 1e+00]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [2e-05, 3e+01]
+Found heuristic solution: objective 0.2487488
+Presolve removed 0 rows and 0 columns (presolve time = 204s) ...
+Presolve removed 20674 rows and 0 columns (presolve time = 246s) ...
+Presolve removed 20674 rows and 0 columns (presolve time = 272s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 284s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 293s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 296s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 309s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 311s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 334s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 335s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 366s) ...
+Presolve removed 308236 rows and 0 columns (presolve time = 379s) ...
+Presolve removed 308236 rows and 0 columns
+Presolve time: 378.51s
+Presolved: 50865 rows, 401 columns, 18149042 nonzeros
+Variable types: 1 continuous, 400 integer (400 binary)
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    1.1169434e-01   0.000000e+00   1.256869e+02    408s
+      74    1.1169434e-01   0.000000e+00   0.000000e+00    410s
+      74    1.1169434e-01   0.000000e+00   0.000000e+00    411s
+      74    1.1169434e-01   0.000000e+00   0.000000e+00    412s
+
+Root relaxation: objective 1.116943e-01, 74 iterations, 9.48 seconds
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+H    0     0                       0.1116943    0.11169  0.00%     -  413s
+     0     0    0.11169    0   14    0.11169    0.11169  0.00%     -  413s
+
+Explored 0 nodes (74 simplex iterations) in 416.51 seconds
+Thread count was 8 (of 8 available processors)
+
+Solution count 2: 0.111694 0.248749 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 1.116943359375e-01, best bound 1.116943359375e-01, gap 0.0000%

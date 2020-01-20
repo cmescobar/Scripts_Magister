@@ -23,3 +23,6 @@ Compressed_sensing_tests/*.lp
 Entropy_test/*.npz
 Entropy_test/Drums_zanark_*/
 Entropy_test/*.txt
+
+# Archivos en Wavelets test
+Wavelets_tests/*.wav

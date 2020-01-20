@@ -1,4 +1,4 @@
-from descriptor_functions import get_mfcc, get_mfcc_by_respiratory_segments|
+from descriptor_functions import get_mfcc, get_mfcc_by_respiratory_segments
 import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf

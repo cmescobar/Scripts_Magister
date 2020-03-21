@@ -1,5 +1,8 @@
 from file_management import get_patient_by_symptom, get_dir_audio_by_id
+from heart_sound_detection import get_wavelet_levels
+from filter_and_sampling import downsampling_signal
 import numpy as np
+import pywt
 import soundfile as sf
 import os
 import descriptor_functions as df
@@ -137,3 +140,75 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
         plt.close()
 
         print("Plot Complete!\n")
+        
+        
+        
+def get_wavelets_images_of_heart_sounds(freq_pass=950, freq_stop=1000, 
+                                        method='lowpass', lp_method='fir',
+                                        fir_method='kaiser', gpass=1, gstop=80,
+                                        levels_to_get=[3,4,5],
+                                        levels_to_decompose=6, wavelet='db4', 
+                                        mode='periodization',
+                                        threshold_criteria='hard', 
+                                        threshold_delta='universal',
+                                        min_percentage=None, print_delta=False,
+                                        normalize=True):
+    # Dirección de los sonidos cardíacos
+    filepath = 'Interest_Audios/Heart_sound_files'
+    filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
+    
+    # Definición de la carpeta a almacenar
+    filepath_to_save = f'{filepath}/{wavelet}'
+    
+    # Preguntar si es que la carpeta que almacenará las imágenes se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(filepath_to_save):
+        os.makedirs(filepath_to_save)
+
+    for i in filenames:
+        print(f"Plotting wavelets of {i}...")
+        # Cargando los archivos
+        audio_file, samplerate = sf.read(f'{filepath}/{i}')
+        
+        # Definición de la dirección dónde se almacenará la imagen
+        filesave = f'{filepath_to_save}/{i.strip(".wav")}.png'
+        
+        # Aplicando un downsampling a la señal para disminuir la cantidad de puntos a 
+        # procesar
+        _, dwns_signal = downsampling_signal(audio_file, samplerate, 
+                                            freq_pass, freq_stop, 
+                                            method=method, 
+                                            lp_method=lp_method, 
+                                            fir_method=fir_method, 
+                                            gpass=gpass, gstop=gstop, 
+                                            plot_filter=False, 
+                                            normalize=normalize)
+        
+        # Se obtienen los wavelets que interesan
+        _ = get_wavelet_levels(dwns_signal, 
+                               levels_to_get=levels_to_get,
+                               levels_to_decompose=levels_to_decompose, 
+                               wavelet=wavelet, mode=mode, 
+                               threshold_criteria=threshold_criteria, 
+                               threshold_delta=threshold_delta, 
+                               min_percentage=min_percentage, 
+                               print_delta=print_delta, 
+                               plot_wavelets=True,
+                               plot_show=False,
+                               plot_save=(True, filesave))
+        print(f"Wavelets of {i} completed!\n")
+
+
+
+# Módulo de testeo
+wavelets_of_interest = pywt.wavelist(kind='discrete')
+get_wavelets_images_of_heart_sounds(freq_pass=950, freq_stop=1000, 
+                                    method='lowpass', lp_method='fir',
+                                    fir_method='kaiser', gpass=1, gstop=80,
+                                    levels_to_get='all',
+                                    levels_to_decompose=6, wavelet='db4', 
+                                    mode='periodization',
+                                    threshold_criteria='hard', 
+                                    threshold_delta='universal',
+                                    min_percentage=None, print_delta=False,
+                                    normalize=True)

@@ -9,7 +9,7 @@ def put_clicks_respiratory_cycle(file_dir, fmin=80, fmax=1000, k_audio=5, k_clic
     # Apertura del archivo de audio
     audio_data, samplerate = sf.read(file_dir)
     # Apertura del archivo del click
-    audio_click, sr_click = sf.read('useful_audio/click.wav')
+    audio_click, _ = sf.read('useful_audio/click.wav')
 
     # Detección de peaks para la señal de audio ingresada. En caso de que no
     # funcione, se registrarán los audios con problema para revisarlos
@@ -35,7 +35,7 @@ def put_clicks_respiratory_cycle(file_dir, fmin=80, fmax=1000, k_audio=5, k_clic
     # Agregando el click a cada elemento
     for peak in peaks:
         for i in range(len(audio_click)):
-            audio_out[peak + i] += audio_click[i]
+            audio_out[peak + i] += click_mast[i]
     
     # Normalizando el audio
     audio_out /= max(audio_out)
@@ -79,8 +79,64 @@ def get_audio_cycles_by_symptom(symptom, fmin=80, fmax=1000):
         print("¡Complete!")
         
 
+def put_clicks_on_audio(signal_in, samplerate, points_to_put,
+                        f_sound=2000, n_sound=1000, k_audio=5, 
+                        k_click=2, click_window=None, 
+                        normalize=True):
+    ''' Función que permite poner clicks de sonido sobre un audio
+    
+    Parámetros
+    - signal_in: Señal de entrada
+    - samplerate: Tasa de muestreo de la señal
+    - points_to_put: Lista de puntos para poner clicks sobre la señal de 
+                     entrada
+    - f_sound: Frecuencia a la que sonará el click
+    - n_sound: Cantidad de puntos que tendrá el click
+    - k_audio: Parámetro de ponderación relativo para la señal de entrada.
+               Tiene relación con el volumen del audio sobre la salida
+    - k_click: Parámetro de ponderación relativo para la señal de click.
+               Tiene relación con el volumen del click sobre la salida
+    - click_windowed: Parámetro que indica si el click es ventaneado
+        - [None]: No se ventanea
+        - ['hamming']: Se ventanea por una ventana hamming
+    - normalize: Booleano para normalización de la señal
+    '''
+    # Definición del click
+    n = np.arange(n_sound)
+    audio_click = np.sin(2 * np.pi * f_sound / samplerate * n)
+    
+    # Aplicación de ventana
+    if click_window == 'hamming':
+        audio_click *= np.hamming(len(audio_click))
+    elif click_window == 'hann':
+        audio_click *= np.hanning(len(audio_click))
+    elif click_window == 'blackman':
+        audio_click *= np.blackman(len(audio_click))
+    elif click_window == 'bartlett':
+        audio_click *= np.bartlett(len(audio_click))
+    
+    # Regulación del volumen de los audios para el sonido final
+    audio_mast = signal_in * k_audio
+    click_mast = audio_click * k_click
+
+    # Sumando el click en las posiciones donde ocurre el fin/comienzo de un
+    # ciclo respiratorio
+    audio_out = np.array([i for i in audio_mast])
+    
+    # Definición del parámetro de largo de la mitad del click
+    half_click = len(click_mast) // 2
+
+    # Agregando el click a cada elemento
+    for point in points_to_put:
+        audio_out[point - half_click:point + half_click] += click_mast
+            
+    if normalize:
+        return audio_out / max(audio_out)
+    else:
+        return audio_out
+
 
 #put_clicks_respiratory_cycle('Interest_Audios/Healthy/'
 #                            '125_1b1_Tc_sc_Meditron.wav')
 
-get_audio_cycles_by_symptom('Healthy', fmin=120)
+# get_audio_cycles_by_symptom('Healthy', fmin=120)

@@ -100,7 +100,7 @@ def get_audio_folder_by_symptom(symptom, sep_type='all'):
     # Preguntar si es que la carpeta que almacenará los sonidos se ha
     # creado. En caso de que no exista, se crea una carpeta
     if not os.path.isdir(folder_data):
-        os.mkdir(folder_data)
+        os.makedirs(folder_data)
 
     # Lectura de cada uno de los archivos de audios para la reescritura
     # normalizada del archivo de audio
@@ -138,10 +138,57 @@ def get_segmentation_points_by_filename(symptom, filename):
                 list_txt = i.split(';')[1].strip()
                 # Transformando a lista
                 return literal_eval(list_txt)
+
+
+def get_heart_sound_files():
+    # Dirección del archivo de sonidos cardíacos
+    filename = "Heart_sound_present_signals.csv"
+    
+    # Definición de la carpeta dónde se guardará la información
+    folder_data = f'Interest_Audios/Heart_sound_files'
+    
+    # Preguntar si es que la carpeta que almacenará los sonidos se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(folder_data):
+        os.makedirs(folder_data)
+    
+    # Abriendo el archivo
+    with open(filename, 'r', encoding='utf8') as file:
+        for i in file:
+            # Nombre del archivo .wav
+            audio_name = i.strip() + ".wav"
             
+            # Dirección del archivo en la carpeta madre. Este archivo es el que 
+            # se copiará
+            dir_to_copy = f"Respiratory_Sound_Database/audio_and_txt_files/"\
+                          f"{audio_name}"
+                          
+            # Dirección en la cual se almacenará este nuevo archivo
+            dir_to_paste = f"{folder_data}/{audio_name}"
+            
+            # Abriendo y re grabando
+            audio, samplerate = sf.read(dir_to_copy)
+            
+            # Normalizando
+            audio = audio / max(abs(audio))
+            
+            # Re grabando
+            sf.write(dir_to_paste, audio, samplerate)
+            
+    
+
 # Test module
 '''symptom = "Pneumonia"
 get_audio_folder_by_symptom(symptom, sep_type='all')
 get_audio_folder_by_symptom(symptom, sep_type='tracheal')
 get_audio_folder_by_symptom(symptom, sep_type='toracic')
 get_segmentation_points_by_filename("Healthy")'''
+# import matplotlib.pyplot as plt 
+# get_heart_sound_files()
+
+get_audio_folder_by_symptom('URTI', sep_type='all')
+get_audio_folder_by_symptom('Asthma', sep_type='all')
+get_audio_folder_by_symptom('COPD', sep_type='all')
+get_audio_folder_by_symptom('LRTI', sep_type='all')
+get_audio_folder_by_symptom('Bronchiectasis', sep_type='all')
+get_audio_folder_by_symptom('Bronchiolitis', sep_type='all')

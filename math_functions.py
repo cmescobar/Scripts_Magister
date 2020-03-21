@@ -114,3 +114,27 @@ def wiener_filter(V, WiHi, W, H, alpha=1):
     # Aplicando la máscara al espectrograma original, se obtiene el resultado
     # final del proceso de separación de fuentes
     return mask * V
+
+
+def SNR(signal_in, signal_denoised, snr_type='db'):
+    if snr_type == 'db':
+        return 10 * np.log10(sum(signal_in ** 2) / 
+                             sum((signal_in - signal_denoised) ** 2))
+
+
+def moving_average(signal_in, Lf):
+    # Definición de N
+    N = len(signal_in)
+    # Creación del vector del resultado
+    result = np.zeros(N)
+    
+    # Se hace el promedio para cada segmento
+    for n in range(N):
+        if 0 <= n <= Lf - 1:
+            result[n] = np.divide(sum(signal_in[:n+Lf+1]), Lf + n + 1)
+        elif Lf <= n <= N - Lf - 1:
+            result[n] = np.divide(sum(signal_in[n-Lf:n+Lf+1]), 2*Lf + 1)
+        elif N - Lf <= n <= N - 1:
+            result[n] = np.divide(sum(signal_in[n-Lf:N]), Lf + N - 1)
+            
+    return result

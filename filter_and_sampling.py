@@ -12,59 +12,195 @@ def stretch_signal(signal_in, N_stretch):
                      for i in range(len(signal_in) * N_stretch)])
 
 
+def beta_kaiser(A):
+    '''Función por tramos que indica el valor que debe tomar el
+    parámetro beta
+    
+    Parámetros
+    - A: Ganancia máxima entre ripple de pasa banda y rechaza 
+         banda obtenido anteriormente mediante la parametrización
+         
+    Referencias
+    [1] Digital Signal Processing: Principles, Algorithms, and 
+        Applications by J. G. Proakis and D. G. Manolakis.
+    '''
+    if A < 21:
+        return 0
+    elif 21 <= A <= 50:
+        return 0.5842 * (A - 21) ** 0.4 + 0.07886 * (A - 21)
+    else:
+        return 0.1102 * (A - 8.7)
+
+
 def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
                    method='fir', fir_method='kaiser', gpass=1, 
-                   gstop=80, plot_filter=False, normalize=True):
+                   gstop=80, plot_filter=False, correct_by_gd=True,
+                   gd_padding='periodic', normalize=True):
     '''Función que permite crear un filtro pasabajos con una frecuencia
     de corte ingresada por el usuariom el cual se aplicará a la señal de
     entrada de la función.
     
     Parámetros
     - signal: Señal a filtrar
-    - cutoff_freq: frecuencia de corte en radianes (pi representa fs/2)
+    - samplerate: Tasa de muestreo de la señal utilizada
+    - freq_pass: Frecuencia de corte de la pasa banda
+    - freq_stop: Frecuencia de corte de la rechaza banda
+    - cutoff_freq: Frecuencia de corte en radianes (pi representa fs/2)
     - method: Método de filtrado
-        - [fir]: se implementa un filtro fir
-        - [iir]: se implementa un filtro iir
+        - ['fir']: Se implementa mediante un filtro fir
+        - ['iir']: Se implementa mediante un filtro iir
+        - ['cut']: Se implementa simplemente cortando en la frecuencia de interés
+    - fir_method: Método de construcción del filtro FIR
+        - ['window']: Construcción por método de la ventana
+        - ['kaiser']: Construcción por método de ventana kaiser
+        - ['remez']: Construcción por algoritmo remez
+    - gpass: Ganancia en dB de la magnitud de la pasa banda
+    - gstop: Ganancia en dB de la magnitud de la rechaza banda
+    - plot_filter: Booleano que permite graficar la señal a ifiltrar y el filtro
+    - correct_by_gd: Booleano que permite corregir la salida del filtro FIR por su
+                     retraso de grupo
+    - gd_padding: Formato para el padding de la señal de entrada
+        - [None]: No se hace padding
+        - ['zero']: Se hace padding con "len(signal_in)" ceros a la izquierda y
+                    derecha de la señal
+        - ['periodic']: Se hace padding copiando la señal 3 veces
+        - ['constant']: Se hace padding copiando el primer y el último valor para
+                        el caso de la izquierda y la derecha respectivamente
+    - normalize: Normalización de la señal de salida
     '''
-    
+    # Obtención de los parámetros para cada método
     if method == 'fir':
         num = fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=gpass,
                                  gstop=gstop, use_exact=True, method=fir_method,
                                  print_window=plot_filter, apply_firwin=False)
         den = 1
-    
     elif method == 'iir':
         num, den = signal.iirdesign(wp=freq_pass / samplerate,
                                     ws=freq_stop / samplerate,
                                     gpass=gpass, gstop=gstop)
+        # Se define de facto el padding en None ya que es solo una función para
+        # filtros FIR
+        gp_padding = None
+    elif method == 'cut':
+        gd = 0 
+        signal_filtered =  lowpass_cut_frequency(signal_in, samplerate, 
+                                                 freq_stop)
+        # Se define de facto el padding en None ya que es solo una función para
+        # filtros FIR
+        gp_padding = None
     
-    if plot_filter:
+    # Presentación de la señal de entrada
+    if gd_padding is None:
+        signal_to_filt = signal_in
+    elif gd_padding == 'zero':
+        signal_to_filt = np.concatenate(([0] * len(signal_in),
+                                         signal_in,
+                                         [0] * len(signal_in)))
+    elif gd_padding == 'periodic':
+        signal_to_filt = np.concatenate((signal_in,
+                                         signal_in,
+                                         signal_in))
+    elif gd_padding == 'constant':
+        signal_to_filt = np.concatenate(([signal_in[0]] * len(signal_in),
+                                         signal_in,
+                                         [signal_in[-1]] * len(signal_in)))
+    else:
+        raise Exception('Opción de padding no disponible. Por favor, intente '
+                        'nuevamente')
+    
+    # Para poder filtrar el audio
+    if method != 'cut':
+        _, gd = signal.group_delay((num, den))
+        signal_filtered = signal.lfilter(num, den, signal_to_filt)
+        
+        # Si se hace padding, se debe cortar de tal forma que se logre sincro-
+        # nizar la señal de entrada en función del delay de grupo
+        if gd_padding is not None:
+            # Delay de grupo aproximado
+            delay = round(np.mean(gd))
+            
+            # Definición de los índices a considerar. Se escogen estos índices
+            # ya que se asume que el comportamiento ideal de la señal 3 veces
+            # paddeada, se encuentra en el centro del arreglo
+            ini_index = int(len(signal_in) + delay)
+            end_index = int(2 * len(signal_in) + delay)
+            
+            # Recortando
+            signal_filtered = signal_filtered[ini_index:end_index]
+    
+    if plot_filter:        
+        # Subplot principal para los 2 gráficos
+        _, ax = plt.subplots(2,1)
+        
+        # Graficando la señal
+        ax[0].set_title('')
+        ax[0].plot(signal_to_filt)
+        
         # Y obteniendo la función de transferencia h
         w, h = signal.freqz(num, den)
-        
-        # Graficando
-        _, ax1 = plt.subplots()
-        ax1.set_title('Respuesta en frecuencia del filtro digital')
+        # Graficando el filtro
+        ax[1].set_title('Respuesta en frecuencia del filtro digital')
         magnitude = 20 * np.log10(abs(h))
-        ax1.plot(w, magnitude, 'r')
-        ax1.set_ylabel('Magnitude [dB]', color='r')
-        ax1.set_xlabel('Frequencia [rad/sample]')
-        ax1.set_ylim([min(magnitude), max(magnitude) + 10])
-        ax2 = ax1.twinx()
+        ax[1].plot(w, magnitude, 'r')
+        ax[1].set_ylabel('Magnitude [dB]', color='r')
+        ax[1].set_xlabel('Frequencia [rad/sample]')
+        ax[1].set_ylim([min(magnitude), max(magnitude) + 10])
+        ax2 = ax[1].twinx()
         angles = np.unwrap(np.angle(h))
         ax2.plot(w, angles, 'b')
         ax2.set_ylabel('Phase (radians)', color='b')
         ax2.axis('tight')
         ax2.set_ylim([min(angles), max(angles)])
         plt.show()
-        
-    # Para poder filtrar el audio
-    signal_filtered = signal.lfilter(num, den, signal_in)
     
     if normalize:
-        return signal_filtered / max(abs(signal_filtered))
+        return gd, signal_filtered / max(abs(signal_filtered))
     else:
-        return signal_filtered
+        return gd, signal_filtered
+
+
+def lowpass_cut_frequency(signal_in, samplerate, freq_stop,
+                          signal_ref=None):
+    '''Función de filtro pasa bajos que corta en una frecuencia 
+    determinada, simplemente haciendo cero las frecuencias más
+    altas que la frecuencia de corte.
+    
+    Parámetros
+    - signal_in: Señal de entrada
+    - samplerate: Frecuencia de muestreo de la señal
+    - freq_stop: Frecuencia de corte de la señal
+    - signal_ref: Señal de referencia (se utiliza en caso de que 
+                  se busque que la señal de salida sea de un largo
+                  distinto al de la señal de entrada, por ejemplo,
+                  en un proceso de upsampling)
+    '''
+    # Condición de inicio
+    if signal_ref is None:
+        signal_ref = signal_in
+    
+    # Frecuencia de corte relativa
+    w_cut =  freq_stop / samplerate
+    # Punto de la frecuencia de corte
+    cutpoint = int(w_cut * len(signal_ref))
+
+    # Calculando su transformada de Fourier
+    signal_fft = np.fft.fft(signal_in)
+    # Componentes de la FFT
+    mag = np.abs(signal_fft)
+    pha = np.angle(signal_fft)
+
+    # Realización del corte en la frecuencia definida
+    mag_cutted = np.concatenate((mag[:cutpoint], 
+                                 [0] * (len(signal_in) - cutpoint * 2),
+                                 mag[-cutpoint:]))
+
+    # Reconstruyendo la señal
+    signal_cutted = mag_cutted * np.exp(1j * pha)
+
+    # Aplicando la trnasformada inversa
+    signal_lp = np.real(np.fft.ifft(signal_cutted))
+    
+    return signal_lp
 
 
 def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
@@ -210,7 +346,7 @@ def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
         elif window_choose == 'bartlett':
             window = np.bartlett(L)
         elif window_choose == 'hann':
-            window = np.hanning(L)
+            window = np.hann(L)
         elif window_choose == 'hamming':
             window = np.hamming(L)
         elif window_choose == 'blackman':
@@ -228,29 +364,10 @@ def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
         return  hd_n * window
 
 
-def beta_kaiser(A):
-    '''Función por tramos que indica el valor que debe tomar el
-    parámetro beta
-    
-    Parámetros
-    - A: Ganancia máxima entre ripple de pasa banda y rechaza 
-         banda obtenido anteriormente mediante la parametrización
-         
-    Referencias
-    [1] Digital Signal Processing: Principles, Algorithms, and 
-        Applications by J. G. Proakis and D. G. Manolakis.
-    '''
-    if A < 21:
-        return 0
-    elif 21 <= A <= 50:
-        return 0.5842 * (A - 21) ** 0.4 + 0.07886 * (A - 21)
-    else:
-        return 0.1102 * (A - 8.7)
-
-
 def downsampling_signal(signal_in, samplerate, freq_pass, freq_stop, 
                         method='lowpass', lp_method='fir', 
-                        fir_method='kaiser', gpass=1, gstop=80, 
+                        fir_method='kaiser', gpass=1, gstop=80,
+                        correct_by_gd=True, gd_padding='periodic',
                         plot_filter=False, normalize=True):
     '''Función que permite disminuir la cantidad de muestras por 
     unidad de tiempo de una señal dada, en función de la frecuencia
@@ -266,12 +383,14 @@ def downsampling_signal(signal_in, samplerate, freq_pass, freq_stop,
                  último corte (por ende, si busca samplear a 2kHz,
                  seleccione este parámetro en 1kHz)
     - method: Método de submuestreo
-        - [lowpass]: Se aplica un filtro pasabajos para evitar
+        - ['lowpass']: Se aplica un filtro pasabajos para evitar
                      aliasing de la señal. Luego se submuestrea
-        - [cut]: Simplemente se corta en la frecuencia de interés 
+        - ['cut']: Simplemente se corta en la frecuencia de interés
+        - ['resample']:Se aplica la función resample de scipy
+        - ['resample_poly']:Se aplica la función resample_poly de scipy
     - lp_method: Método de filtrado para elección lowpass
-        - [fir]: se implementa un filtro FIR
-        - [iir]: se implementa un filtro IIR
+        - ['fir']: se implementa un filtro FIR
+        - ['iir']: se implementa un filtro IIR
     - fir_method: Método de construcción del filtro FIR  en caso 
                   de seleccionar el método lowpass con filtro FIR
         - ['window']: Construcción por método de la ventana
@@ -279,57 +398,48 @@ def downsampling_signal(signal_in, samplerate, freq_pass, freq_stop,
         - ['remez']: Construcción por algoritmo remez
     - gpass: Ganancia en dB de la magnitud de la pasa banda
     - gstop: Ganancia en dB de la magnitud de la rechaza banda
+    - correct_by_gd: Booleano que permite corregir la salida del filtro FIR 
+                     por su retraso de grupo
+    - gd_padding: Formato para el padding de la señal de entrada
     - plot_filter: Booleano para activar ploteo del filtro aplicado
     - normalize: Normalización de la señal de salida
+    
+    Referencias
+    [1] https://www.cppsim.com/BasicCommLectures/lec10.pdf
     '''
     # Se calcula el paso de la decimación
     N = round(samplerate / (freq_stop * 2))
     
+    # Calculo de la nueva tasa de muestreo
+    new_rate = samplerate // N
+    
     if method == 'lowpass':
         # Aplicando el filtro pasa bajos
-        signal_lp = lowpass_filter(signal_in, samplerate, freq_pass, 
-                                   freq_stop, method=lp_method, 
-                                   fir_method=fir_method, gpass=gpass, 
-                                   gstop=gstop, plot_filter=plot_filter, 
-                                   normalize=normalize)
-    
+        gp, signal_lp = lowpass_filter(signal_in, samplerate, freq_pass, 
+                                       freq_stop, method=lp_method, 
+                                       fir_method=fir_method, gpass=gpass, 
+                                       gstop=gstop, plot_filter=plot_filter,
+                                       correct_by_gd=correct_by_gd,
+                                       gd_padding=gd_padding,
+                                       normalize=normalize)
     elif method == 'cut':
-        # Frecuencia de corte relativa
-        w_cut =  freq_stop / samplerate
-        # Punto de la frecuencia de corte
-        cutpoint = int(w_cut * len(signal_in))
-        
-        # Calculando su transformada de Fourier
-        signal_fft = np.fft.fft(signal_in)
-        # Componentes de la FFT
-        mag = np.abs(signal_fft)
-        pha = np.angle(signal_fft)
-        
-        # Realización del corte en la frecuencia definida
-        mag_cutted = np.concatenate((mag[:cutpoint], 
-                                     [0] * (len(signal_in) - cutpoint * 2),
-                                     mag[-cutpoint:]))
-        
-        # Reconstruyendo la señal
-        signal_cutted = mag_cutted * np.exp(1j * pha)
-        
-        # Aplicando la trnasformada inversa
-        signal_lp = np.real(np.fft.ifft(signal_cutted))
-        
+        signal_lp = lowpass_cut_frequency(signal_in, samplerate, 
+                                          freq_stop)
     elif method == 'resample':
-        return N, signal.resample(signal_in, len(signal_in)//N)
-    
+        return new_rate, signal.resample(signal_in, 
+                                         len(signal_in)//N)
     elif method == 'resample_poly':
-        return N, signal.resample_poly(signal_in, len(signal_in)//N, 1)
-    
+        return new_rate, signal.resample_poly(signal_in, 
+                                              len(signal_in)//N, 1)
     # Aplicando decimación
-    return N, decimation_signal(signal_lp, N_decimate=N)
+    return new_rate, decimation_signal(signal_lp, N_decimate=N)
 
 
 def upsampling_signal(signal_in, samplerate, new_samplerate,
                       N_desired=None, method='lowpass',
                       trans_width=50, lp_method='fir', 
                       fir_method='kaiser', gpass=1, gstop=80, 
+                      correct_by_gd=True, gd_padding='periodic',
                       plot_filter=False, plot_signals=False,
                       normalize=True):
     '''Función que permite aumentar la cantidad de muestras por 
@@ -344,6 +454,8 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         - [lowpass]: Se aplica un filtro pasabajos para evitar
                      aliasing de la señal. Luego se submuestrea
         - [cut]: Simplemente se corta en la frecuencia de interés
+        - ['resample']:Se aplica la función resample de scipy
+        - ['resample_poly']:Se aplica la función resample_poly de scipy
     - trans_width: Banda de transición entre la frecuencia de corte de
                    la señal original (que representa la frecuencia de 
                    corte del rechaza banda) y la pasa banda del filtro
@@ -358,6 +470,9 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         - ['remez']: Construcción por algoritmo remez
     - gpass: Ganancia en dB de la magnitud de la pasa banda
     - gstop: Ganancia en dB de la magnitud de la rechaza banda
+    - correct_by_gd: Booleano que permite corregir la salida del filtro FIR 
+                     por su retraso de grupo
+    - gd_padding: Formato para el padding de la señal de entrada
     - plot_filter: Booleano para activar ploteo del filtro aplicado
     - normalize: Normalización de la señal de salida
     
@@ -386,37 +501,22 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         freq_pass = freq_stop - trans_width
         
         # Aplicando el filtro
-        signal_lp = lowpass_filter(signal_stretched, new_samplerate, 
-                                   freq_pass, freq_stop, method=lp_method, 
-                                   fir_method=fir_method, gpass=gpass, 
-                                   gstop=gstop, plot_filter=plot_filter, 
-                                   normalize=normalize)
-    
+        gp, signal_lp = lowpass_filter(signal_stretched, new_samplerate, 
+                                       freq_pass, freq_stop, method=lp_method, 
+                                       fir_method=fir_method, gpass=gpass, 
+                                       gstop=gstop, correct_by_gd=correct_by_gd,
+                                       gd_padding=gd_padding,
+                                       plot_filter=plot_filter, 
+                                       normalize=normalize)    
     elif method == 'cut':
-        # Frecuencia de corte relativa (1/2)
-        w_cut =  (samplerate / 2) / samplerate 
-        # Punto de la frecuencia de corte
-        cutpoint = int(w_cut * len(signal_in))
-        
-        # Calculando su transformada de Fourier
-        signal_fft = np.fft.fft(signal_stretched)
-        # Componentes de la FFT
-        mag = np.abs(signal_fft)
-        pha = np.angle(signal_fft)
-        
-        # Realización del corte en la frecuencia definida
-        mag_cutted = np.concatenate((mag[:cutpoint], 
-                                     [0] * (len(signal_stretched) - cutpoint * 2),
-                                     mag[-cutpoint:]))
-        
-        # Reconstruyendo la señal
-        signal_cutted = mag_cutted * np.exp(1j * pha)
-        
-        # Aplicando la trnasformada inversa
-        signal_lp = np.real(np.fft.ifft(signal_cutted))
+        # Definición de la frecuencia de corte
+        freq_stop = samplerate / 2
+        # Método de corte
+        signal_lp = lowpass_cut_frequency(signal_stretched, samplerate, 
+                                          freq_stop, signal_ref=signal_in)
         
     elif method == 'resample':
-        return signal.resample(signal_in, N_desired, window='kaiser')
+        return signal.resample(signal_in, N_desired)
     
     elif method == 'resample_poly':
         # Señal resampleada

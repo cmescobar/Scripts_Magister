@@ -346,7 +346,7 @@ def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
         elif window_choose == 'bartlett':
             window = np.bartlett(L)
         elif window_choose == 'hann':
-            window = np.hann(L)
+            window = np.hanning(L)
         elif window_choose == 'hamming':
             window = np.hamming(L)
         elif window_choose == 'blackman':
@@ -474,6 +474,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
                      por su retraso de grupo
     - gd_padding: Formato para el padding de la señal de entrada
     - plot_filter: Booleano para activar ploteo del filtro aplicado
+    - plot_signals: Booleano para activar ploteo de la magnitud de las señales
     - normalize: Normalización de la señal de salida
     
     Referencias
@@ -501,7 +502,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         freq_pass = freq_stop - trans_width
         
         # Aplicando el filtro
-        gp, signal_lp = lowpass_filter(signal_stretched, new_samplerate, 
+        _, signal_lp = lowpass_filter(signal_stretched, new_samplerate, 
                                        freq_pass, freq_stop, method=lp_method, 
                                        fir_method=fir_method, gpass=gpass, 
                                        gstop=gstop, correct_by_gd=correct_by_gd,
@@ -552,3 +553,26 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         return signal_lp / max(abs(signal_lp))
     else:
         return signal_lp
+
+
+# Testing module
+'''import soundfile as sf
+
+filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'
+audio, samplerate = sf.read(f'{filename}.wav')
+new_rate, dwns_signal = downsampling_signal(audio, samplerate, 950, 1000, 
+                                            method='lowpass', lp_method='fir', 
+                                            fir_method='kaiser', gpass=1, gstop=80,
+                                            correct_by_gd=True, gd_padding='periodic',
+                                            plot_filter=False, normalize=True)
+
+restored_signal = upsampling_signal(dwns_signal, new_rate, samplerate,
+                                    N_desired=None, method='lowpass',
+                                    trans_width=50, lp_method='fir', 
+                                    fir_method='kaiser', gpass=1, gstop=80, 
+                                    plot_filter=False, plot_signals=False,
+                                    normalize=True)
+
+plt.plot(audio)
+plt.plot(restored_signal)
+plt.show()'''

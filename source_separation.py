@@ -15,8 +15,10 @@ def blind_source_separation_nmf(audio, samplerate, namefile, dir_foldersave,
     """Basado en el método mencionado en el paper: Lin, C., & Hasting, E. (2013.
     Blind source separation of heart and lung sounds based on nonnegative matrix
     factorization. 2013 International Symposium on Intelligent Signal 
-    Processing and Communication Systems. Referencia tutorial:
-    https://ccrma.stanford.edu/~njb/teaching/sstutorial/part2.pdf """
+    Processing and Communication Systems. 
+    
+    Referencias:
+    - Tutorial: https://ccrma.stanford.edu/~njb/teaching/sstutorial/part2.pdf """
 
     # Almacen de datos para separación de sonidos
     recuperated_sound_1 = np.asarray([0] * len(audio), dtype=np.complex64)
@@ -266,8 +268,9 @@ for i in cfreqs:
             sep_type=sep_type)
         apply_high_pass_filter_to_symptom("Pneumonia", cutoff=i,
             sep_type=sep_type)
-'''
+
 # Blind source separation
 for sep_type in ['all', 'tracheal', 'toracic']:
     apply_source_separation_to_symptom("Healthy", sep_type=sep_type)
-    apply_source_separation_to_symptom("Pneumonia", sep_type=sep_type) 
+    apply_source_separation_to_symptom("Pneumonia", sep_type=sep_type)
+'''

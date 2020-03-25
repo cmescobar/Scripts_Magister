@@ -322,7 +322,7 @@ def plot_cycles_by_symptom(symptom, sep_type='all', preproc='raw', show=False,
                     # Guardando finalmente la figura...
                     plt.savefig(f'{savefig_path}/smooth_{filename[:-3]}'
                                 f'{img_format}')
-                
+                                    
                     
                 elif method == 2:
                     # Obtenieniendo su varinza fractal, y sus peaks

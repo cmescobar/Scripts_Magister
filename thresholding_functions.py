@@ -152,6 +152,7 @@ def wavelet_thresholding(signal_in, delta=None, threshold_criteria='soft',
 def thresholding_processing(signal_in):
     '''Proceso que permite separar las envolventes de los murmullos del primer
     sonido cardíaco (S1) que no fueron totalmente removidos por ALPF
+    
     Referencias: 
     - Qingshu Liu, et.al. An automatic segmentation method for heart sounds.
       2018. Biomedical Engineering.

@@ -1,4 +1,4 @@
-from file_management import get_patient_by_symptom, get_dir_audio_by_id
+from file_management import get_patient_by_symptom, get_dir_audio_by_id, get_heartbeat_points
 from heart_sound_detection import get_wavelet_levels, get_upsampled_thresholded_wavelets,\
     get_zero_points
 from filter_and_sampling import downsampling_signal
@@ -157,9 +157,8 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
         plt.close()
 
         print("Plot Complete!\n")
-        
-        
-        
+
+
 def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000, 
                                         method='lowpass', lp_method='fir',
                                         fir_method='kaiser', gpass=1, gstop=80,
@@ -396,8 +395,93 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
         print(f"Wavelets of {i} completed!\n")
 
 
+def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
+                                          method='lowpass', lp_method='fir',
+                                          fir_method='kaiser', gpass=1, gstop=80,
+                                          levels_to_get=[3,4,5],
+                                          levels_to_decompose=6, wavelet='db4', 
+                                          mode='periodization',
+                                          threshold_criteria='hard', threshold_delta='universal',
+                                          min_percentage=None, print_delta=False,
+                                          plot_show=False, normalize=True):
+    '''Función que permite generar los plots de detección de las señales PCG
+    de la base de datos normal del set A en "Heartbeat sounds", incluyendo la
+    señal original, la magnitud de la suma de los wavelets en niveles de interés
+    y los puntos originales con los detectados por la implementación
+    
+    Parámetros
+    - filepath: Directorio donde se encuenta el set de audios 
+    '''
+    # Definición de la carpeta a buscar
+    filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
+    
+    # Lista de los sonidos cardíacos a procesar
+    filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
+    
+    for audio_name in filenames:
+        print(f'Plotting heart sound detection of {audio_name}...')
+        # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
+        dir_to_copy = f"{filepath}/{audio_name}"
+        
+        # Dirección en la cual se almacenará este nuevo archivo
+        dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection.png"
+        
+        # Lectura del archivo
+        audio_file, samplerate = sf.read(dir_to_copy)
+        
+        # Obteniendo los wavelets de interés (upsampleados)
+        wavelets = \
+            get_upsampled_thresholded_wavelets(audio_file, samplerate, 
+                                               freq_pass=freq_pass, freq_stop=freq_stop, 
+                                               method=method, lp_method=lp_method, 
+                                               fir_method=fir_method, 
+                                               gpass=gpass, gstop=gstop, 
+                                               plot_filter=False, levels_to_get=levels_to_get, 
+                                               levels_to_decompose=levels_to_decompose,
+                                               wavelet=wavelet, 
+                                               mode=mode, 
+                                               threshold_criteria=threshold_criteria, threshold_delta=threshold_delta,
+                                               min_percentage=min_percentage, 
+                                               print_delta=print_delta,
+                                               plot_wavelets=False, normalize=normalize)
+        
+        # Definición de la suma de wavelets
+        sum_wavelets = abs(sum(wavelets))
+        
+        # Obtenición de los puntos estimados
+        detected_points = get_zero_points(sum_wavelets, complement=True, tol=1e-12, 
+                                          to_return='center')
+        
+        # Obtención de los puntos etiquetados
+        labeled_points = get_heartbeat_points(audio_name)
+        
+        # Graficando las señales
+        plt.figure(figsize=(15,6))
+        plt.plot(audio_file)
+        plt.plot(sum_wavelets)
+        # Graficando las etiquetas
+        plt.plot(labeled_points, [0] * len(labeled_points), color='lime', 
+                 marker='o', linestyle='', label='Etiquetas')
+        plt.plot(detected_points, [0] * len(detected_points), color='red', 
+                 marker='x', linestyle='', label='Detecciones')
+        
+        plt.legend(loc='upper right', bbox_to_anchor=(1, 1), fontsize=8)
+        
+        # Guardando
+        plt.savefig(dir_to_paste)
+        
+        # Mostrando
+        if plot_show:
+            plt.show()
+        
+        plt.close()
+        print('Complete!\n')
 
+        
+        
 # Módulo de testeo
+get_detection_vs_labels_heartbeats_db(plot_show=False)
+
 '''import pywt
 wavelets_of_interest = pywt.wavelist(kind='discrete')
 

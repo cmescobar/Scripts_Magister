@@ -10,6 +10,8 @@ def get_patient_by_symptom(symptom):
     '''Esta función permite retornar una lista de pacientes que tiene la
     etiqueta de la enfermedad respiratoria pedida en la variable
     "symptom".
+    
+    Parámetros
     - "symptom": (string) Enfermedad a buscar
 
     Retorna una lista (out) con los ID de los pacientes que estén con ese
@@ -28,7 +30,9 @@ def get_patient_by_symptom(symptom):
 
 def get_dir_audio_by_id(id_list):
     '''Esta función permite retornar una lista de la dirección de los audios de
-     los pacientes que se encuentran en la lista de identificadores "id_list"
+    los pacientes que se encuentran en la lista de identificadores "id_list"
+     
+    Parámetros
     - "id_list": (list) Lista de id's de los pacientes a buscar
 
     Retorna una lista (out) con las direcciones de los audios de esta lista
@@ -48,6 +52,8 @@ def get_dir_audio_by_id(id_list):
 def get_dir_audiotxt_by_id(id_list):
     '''Esta función permite retornar una lista de la dirección de los audios de
      los pacientes que se encuentran en la lista de identificadores "id_list"
+     
+    Parámetros
     - "id_list": (list) Lista de id's de los pacientes a buscar
 
     Retorna una lista (out) con las direcciones de los txt de los audios de esta
@@ -68,6 +74,8 @@ def get_dir_audiotxt_by_symptom(symptom, wav=True):
     '''Esta función permite retornar una lista de pacientes que tiene la
     etiqueta de la enfermedad respiratoria pedida en la variable
     "symptom".
+    
+    Parámetros
     - "symptom": (string) Enfermedad a buscar
 
     Retorna una lista (out) con direcciones de los audios de los pacientes que
@@ -189,8 +197,6 @@ def get_heart_sound_by_presence(level=4):
         - ['all']: Crea una carpeta de todos los sonidos de esa base
         - [int]: Crea una carpeta del nivel indicado
     '''
-    
-    
     # Dirección del archivo de sonidos cardíacos
     filename = "labels/Heart_sound_present_signals.csv"
     
@@ -240,10 +246,149 @@ def get_heart_sound_by_presence(level=4):
                 # Re grabando
                 sf.write(dir_to_paste, audio, samplerate)
                 print('Completed!\n')
+
+
+def get_heart_sound_files_heartbeatdb(datatype='normal', setdef='a'):
+    '''Función que genera una base de datos de sonidos cardiacos basados en
+    la carpeta "Heartbeat sounds", eligiendo qué tipo de señal se quiere 
+    obtener y el set
+    
+    Parámetros
+    - datatype: Tipo de sonido cardíaco a obtener
+    - setdef: Es posible elegir entre la base de datos "a" o "b"
+    '''
+    # Dirección de ubicación de archivos cardíacos
+    filepath = f'Heartbeat sounds/set_{setdef}'
+    
+    # Definición de la carpeta a guardar
+    folder_data = f'Heartbeat sounds/Generated/{datatype}_{setdef}'
+    
+    # Preguntar si es que la carpeta que almacenará los sonidos se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(folder_data):
+        os.makedirs(folder_data)
+    
+    # Cargando los archivos de audio
+    filenames = os.listdir(filepath)
+    
+    for audio_name in filenames:
+        # Discriminación de archivos por tipo
+        if datatype in audio_name:
+            print(f'Recording {audio_name}...')
+            # Dirección del archivo en la carpeta madre. Este archivo es el que 
+            # se copiará
+            dir_to_copy = f'{filepath}/{audio_name}'
+                              
+            # Dirección en la cual se almacenará este nuevo archivo
+            dir_to_paste = f"{folder_data}/{audio_name}"
             
+            audio, samplerate = sf.read(dir_to_copy)
+            
+            # Normalizando
+            audio = audio / max(abs(audio))
+            
+            # Re grabando
+            sf.write(dir_to_paste, audio, samplerate)
+            print('Completed!\n')
+
+
+def get_labeled_heart_sound_files_heartbeatdb(record=True):
+    '''Función que genera una base de datos de sonidos cardiacos basados en
+    la carpeta "Heartbeat sounds", eligiendo solamente las señales que están
+    etiquetadas en el archivo "set_a_timing.csv". Retorna una lista con los 
+    nombres de los archivos de audio etiquetado
+    
+    Parámetros
+    - record: Booleano que indica si el archivo es además generado. Si es True,
+              se crea en la carpeta indicada en "folder_data". Si es False, no
+    '''
+    # Dirección de ubicación de archivos cardíacos
+    filepath = f'Heartbeat sounds/set_a'
+    
+    # Dirección del archivo de etiquetas
+    filelabel = f'Heartbeat sounds/set_a_timing.csv'
+    
+    # Definición de la carpeta a guardar
+    folder_data = f'Heartbeat sounds/Generated/normal_a_labeled'
+    
+    # Preguntar si es que la carpeta que almacenará los sonidos se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(folder_data):
+        os.makedirs(folder_data)
+    
+    # Definición del set en el que se almacenarán los nombres
+    filenames = set()
+    
+    with open(filelabel, 'r', encoding='utf8') as file:
+        # Saltando la primera línea
+        file.readline()
+        for line in file:
+            # Obtención del nombres del archivo
+            audio_name = line.strip().split(',')[0].split('/')[1]
+            
+            # Agregando al set de datos
+            filenames.add(audio_name)
+            
+    # Una vez completado se transforma este set en una lista ordenada
+    filenames_out = list(filenames)
+    filenames_out.sort()
+    
+    if record:
+        for audio_name in filenames_out:
+            print(f'Recording {audio_name}...')
+            # Dirección del archivo en la carpeta madre. Este archivo es el que 
+            # se copiará
+            dir_to_copy = f'{filepath}/{audio_name}'
+                            
+            # Dirección en la cual se almacenará este nuevo archivo
+            dir_to_paste = f"{folder_data}/{audio_name}"
+            
+            audio, samplerate = sf.read(dir_to_copy)
+            
+            # Normalizando
+            audio = audio / max(abs(audio))
+            
+            # Re grabando
+            sf.write(dir_to_paste, audio, samplerate)
+            print('Completed!\n')
+    
+    return filenames_out
+    
+
+def get_heartbeat_points(filename):
+    '''Función que retorna los puntos etiquetados de los sonidos cardíacos
+    de la base de datos "Heartbeat sounds", para los sonidos normales del 
+    set a
+    
+    Parámetros
+    - filename: Nombre del archivo a procesar
+    '''
+    filepath = 'Heartbeat sounds/set_a_timing.csv'
+    
+    # Definición de la lista de puntos a obtener
+    point_list = list()
+    
+    with open(filepath, 'r', encoding='utf8') as file:
+        # Saltando el encabezado
+        file.readline()
+        
+        # Si el nombre está en la línea, se recupera la ubicación del punto
+        for line in file:
+            if filename in line:
+                # Se formatea
+                line_info = line.strip().split(',')
+                
+                # Se añade a la lista
+                point_list.append(int(line_info[-1]))
+                
+    return point_list
 
 
 # Test module
+
+# get_labeled_heart_sound_files_heartbeatdb(record=True)
+# get_heart_sound_files_heartbeatdb()
+
 '''symptom = "Pneumonia"
 get_audio_folder_by_symptom(symptom, sep_type='all')
 get_audio_folder_by_symptom(symptom, sep_type='tracheal')

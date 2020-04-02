@@ -358,10 +358,12 @@ def get_labeled_heart_sound_files_heartbeatdb(record=True):
 def get_heartbeat_points(filename):
     '''Función que retorna los puntos etiquetados de los sonidos cardíacos
     de la base de datos "Heartbeat sounds", para los sonidos normales del 
-    set a
+    set a.
     
-    Parámetros
-    - filename: Nombre del archivo a procesar
+    Parameters
+    ----------
+    filename : str
+        Nombre del archivo a procesar.
     '''
     filepath = 'Heartbeat sounds/set_a_timing.csv'
     
@@ -406,5 +408,5 @@ for i in sep_types:
     get_audio_folder_by_symptom('Bronchiectasis', sep_type=i)
     get_audio_folder_by_symptom('Bronchiolitis', sep_type=i)'''
     
-# get_heart_sound_by_presence(level=3)
+# get_heart_sound_by_presence(level=1)
     

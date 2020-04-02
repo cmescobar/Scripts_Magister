@@ -97,6 +97,13 @@ def abs_fourier_shift(audio, samplerate, N_rep):
     return frec, fourier_shift
 
 
+def abs_fourier_db_half(audio, samplerate, N_rep):
+    audio_rep = np.tile(audio, N_rep)
+    fourier = 20 * np.log10(abs(np.fft.fft(audio_rep)) + 1e-12)
+    frec = np.fft.fftfreq(len(audio_rep), 1 / samplerate)
+    return frec[:len(audio) // 2], fourier[:len(audio)//2] 
+
+
 def get_spectrogram(audio, samplerate, N=512, padding=0, overlap=0, 
                     window='tukey', whole=False):
     # Lista donde se almacenará los valores del espectrograma

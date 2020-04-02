@@ -2,6 +2,7 @@ from file_management import get_patient_by_symptom, get_dir_audio_by_id, get_hea
 from heart_sound_detection import get_wavelet_levels, get_upsampled_thresholded_wavelets,\
     get_zero_points
 from filter_and_sampling import downsampling_signal
+from precision_functions import get_precision_info
 import numpy as np
 import soundfile as sf
 import os
@@ -403,14 +404,76 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
                                           mode='periodization',
                                           threshold_criteria='hard', threshold_delta='universal',
                                           min_percentage=None, print_delta=False,
-                                          plot_show=False, normalize=True):
+                                          plot_show=False, plot_precision_info=True, 
+                                          clean_repeated=True, distance_limit=44100,
+                                          normalize=True):
     '''Función que permite generar los plots de detección de las señales PCG
     de la base de datos normal del set A en "Heartbeat sounds", incluyendo la
     señal original, la magnitud de la suma de los wavelets en niveles de interés
-    y los puntos originales con los detectados por la implementación
+    y los puntos originales con los detectados por la implementación.
     
-    Parámetros
-    - filepath: Directorio donde se encuenta el set de audios 
+    Parameters
+    ----------
+    freq_pass : float
+        Frecuencia de corte de la pasa banda.
+    freq_stop : float
+        Frecuencia de corte de la rechaza banda. Esta es la que se toma en cuenta al
+        momento de hacer el último corte (por ende, si busca samplear a 2kHz, seleccione 
+        este parámetro en 1kHz).
+    method : {'lowpass', 'cut', 'resample', 'resample poly'}, optional
+        Método utilizado para submuestreo. Para 'lowpass', se aplica un filtro pasabajos 
+        para evitar aliasing de la señal, luego se submuestrea. Para 'cut', se corta en la 
+        frecuencia de interés. Para 'resample', se aplica la función resample de scipy. Y
+        para 'resample_poly', se aplica la función resample_poly de scipy. Por defecto es
+        'lowpass'.
+    lp_method : {'fir', 'iir'}, optional
+        Método de filtrado para elección lowpass. Para 'fir' se implementa un filtro FIR.
+        Para 'iir' se implementa un filtro IIR. Por defecto es 'fir'.
+    fir_method : {'window', 'kaiser', 'remez'}, optional
+        Método de construcción del filtro FIR en caso de seleccionar el método lowpass con 
+        filtro FIR. Para 'window', se usa construye por método de la ventana. Para 'kaiser',
+        se cosntruye por método de ventana kaiser. Para 'remez', se construye por algoritmo 
+        remez. Por defecto se usa 'kaiser'.
+    gpass : float, optional
+        Ganancia en dB de la magnitud de la pasa banda. Por defecto es 1 (dB).
+    gstop : float, optional 
+        Ganancia en dB de la magnitud de la rechaza banda. Por defecto es 80 (dB).
+    levels_to_get : {'all', list}, optional
+        Niveles de los Wavelet a recuperar. Para 'all' se recuperan los "levels_to_decompose" 
+        niveles. Además, es posible usar una lista de valores enteros con los niveles de 
+        interés. Por defecto es [3, 4, 5].
+    levels_to_decompose : int, optional
+        Cantidad de niveles en las que se descompondrá la señal. Por defecto es 6.
+    wavelet : str, optional
+        Wavelet utilizado para el proceso de dwt. Revisar en pywt.families(kind='discrete').
+        Por defecto es 'db4' (Daubechies 4).
+    mode : str, optional
+        Tipo de descomposición en wavelets (revisar wavelets del paquete pywt). Por defecto
+        es 'periodization'.
+    threshold_criteria : {'hard', 'soft'}, optional
+        Criterio de aplicación de umbral, entre "hard" y "soft". Por defecto es 'hard'.
+    threshold_delta : {'mad', 'universal', 'sureshrink', 'percentage'} 
+        Selección del criterio de cálculo de umbral. Para 'mad' se usa Median Absolute Deviation.
+        Para 'universal' se usa criterio universal (internet). Para 'sureshrink' se aplica
+        algoritmo SURE. Y para 'percentage', se establece un umbral de porcentaje en relación al 
+        máximo. Por defecto es 'universal'.
+    min_percentage : int, optional
+        Valor del porcentaje con respecto al máximo en la opción "percentage" de la variable 
+        "threshold_delta". Por defecto es None.
+    print_delta : bool, optional
+        Indicar si se imprime el valor de delta (umbral de threshold). Por defecto es False.
+    plot_show : bool,optional
+        Mostrar gráficos mientras se corre el programa. Por defecto es False.
+    plot_precision_info : bool, optional
+        Mostrar adicionalmente la información del análisis de precisión en el plot. Por defecto
+        es True.
+    clean_repeated : bool, optional
+        Indica si se hace una limpieza de puntos repetidos en la detección (ver función
+        "get_precision_info" en precisions_functions.py). Por defecto es True.
+    distance_limit : int, optional
+        Umbral del muestras máximo a considerar para un acierto (Por defecto es 44100)
+    normalize : bool, optional
+        Normalización de la señal. Por defecto es True.
     '''
     # Definición de la carpeta a buscar
     filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
@@ -422,9 +485,6 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
         print(f'Plotting heart sound detection of {audio_name}...')
         # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
         dir_to_copy = f"{filepath}/{audio_name}"
-        
-        # Dirección en la cual se almacenará este nuevo archivo
-        dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection.png"
         
         # Lectura del archivo
         audio_file, samplerate = sf.read(dir_to_copy)
@@ -456,16 +516,69 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
         labeled_points = get_heartbeat_points(audio_name)
         
         # Graficando las señales
-        plt.figure(figsize=(15,6))
+        plt.figure(figsize=(15,7))
         plt.plot(audio_file)
         plt.plot(sum_wavelets)
-        # Graficando las etiquetas
-        plt.plot(labeled_points, [0] * len(labeled_points), color='lime', 
-                 marker='o', linestyle='', label='Etiquetas')
-        plt.plot(detected_points, [0] * len(detected_points), color='red', 
-                 marker='x', linestyle='', label='Detecciones')
         
-        plt.legend(loc='upper right', bbox_to_anchor=(1, 1), fontsize=8)
+        if plot_precision_info:
+            # Dirección en la cual se almacenará este nuevo archivo
+            dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection and info.png"
+            
+            # Obteniendo la información de precisión de la detección realizada
+            info = get_precision_info(labeled_points, detected_points, 
+                                      clean_repeated=clean_repeated,
+                                      distance_limit=distance_limit)
+            
+            # Y añadiendo las etiquetas de detección (que logran el match)
+            plt.plot(info[1][:,0], [0] * len(info[1][:,0]), color='red', 
+                     marker='o', ls='', label='Detected')
+            plt.plot(info[1][:,1], [0] * len(info[1][:,1]), color='lime', 
+                     marker='X', ls='', label='Labels')
+            
+            # Y las que no logran el match
+            plt.plot(info[5], [0] * len(info[5]), color='magenta',
+                     marker='o', ls='', label='Detection unlabeled')
+            plt.plot(info[4], [0] * len(info[4]), color='cyan',
+                     marker='X', ls='', label='Labels undetected')
+            
+            # Se añade una leyenda al gráfico realizado
+            plt.legend(loc='upper right', bbox_to_anchor=(1, 1), fontsize=8)
+            
+            # Finalmente se añaden tablas resumen
+            table_pos = plt.table(cellText=info[1],
+                        rowLoc='center', colLoc='center',
+                        colColours=['lime', 'red'],
+                        colLabels=["Labels pos", "Detected pos"],
+                        bbox=[1.01, 0.06, 0.23, 0.94],)
+            
+            table_und = plt.table(cellText=[[len(info[4]), len(info[5])]],
+                                  rowLoc='center', colLoc='center',
+                                  colColours=['cyan', 'magenta'],
+                                  colLabels=["Labels und", "Detected unl"],
+                                  bbox=[1.01, 0, 0.23, 0.05],)
+            
+            # Se setean sus fuentes
+            table_pos.set_fontsize(6)
+            table_und.set_fontsize(6)
+            
+            # Y se ajusta el plot principal para que quepa la tabla
+            plt.subplots_adjust(right=0.77)
+        
+        else:
+            # Dirección en la cual se almacenará este nuevo archivo
+            dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection.png"
+            
+            # Graficando las etiquetas no procesadas
+            plt.plot(labeled_points, [0] * len(labeled_points), color='lime', 
+                    marker='o', linestyle='', label='Etiquetas')
+            plt.plot(detected_points, [0] * len(detected_points), color='red', 
+                    marker='x', linestyle='', label='Detecciones')
+            
+            # Se añade una leyenda al gráfico realizado
+            plt.legend(loc='upper right', bbox_to_anchor=(1, 1), fontsize=8)
+        
+        # Agregar titulo
+        plt.suptitle(f'Detection points of {audio_name}')
         
         # Guardando
         plt.savefig(dir_to_paste)
@@ -477,12 +590,33 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
         plt.close()
         print('Complete!\n')
 
-        
-        
-# Módulo de testeo
-get_detection_vs_labels_heartbeats_db(plot_show=False)
 
-'''import pywt
+
+# Módulo de testeo
+# Nivel de importancia
+heart_quality = 4
+filepath = f'Interest_Audios/Heart_sound_files/Level {heart_quality}'
+
+get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
+                          method='lowpass', lp_method='fir',
+                          fir_method='kaiser', gpass=1, gstop=80,
+                          levels_to_get=[3,4,5],
+                          levels_to_decompose=6, wavelet='db4', mode='periodization',
+                          threshold_criteria='hard', threshold_delta='universal',
+                          min_percentage=None, print_delta=False,
+                          normalize=True)
+'''get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
+                                    method='lowpass', lp_method='fir',
+                                    fir_method='kaiser', gpass=1, gstop=80,
+                                    levels_to_get=[4,5],
+                                    levels_to_decompose=6, wavelet='db4', 
+                                    mode='periodization',
+                                    threshold_criteria='hard', threshold_delta='universal',
+                                    min_percentage=None, print_delta=False,
+                                    plot_show=False, plot_precision_info=True, 
+                                    clean_repeated=True, normalize=True)
+
+import pywt
 wavelets_of_interest = pywt.wavelist(kind='discrete')
 
 # Nivel de importancia

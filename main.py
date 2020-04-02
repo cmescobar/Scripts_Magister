@@ -3,7 +3,7 @@ from plot_functions import get_symptom_images_by_frame, \
 from descriptor_functions import centroide, promedio_aritmetico, varianza, \
     skewness, kurtosis, rms, max_amp, zero_cross_rate, centroide_espectral, \
     pendiente_espectral, flujo_espectral, spectral_flatness, \
-    abs_fourier_shift, get_spectrogram
+    abs_fourier_shift, get_spectrogram, abs_fourier_db_half
 from file_management import get_audio_folder_by_symptom
 
 
@@ -29,9 +29,9 @@ if op == "1":
         get_symptom_images_by_frame(i, pendiente_espectral, display_time=True)
         get_symptom_images_by_frame(i, flujo_espectral, display_time=True)
         get_symptom_images_by_frame(i, spectral_flatness, display_time=True)
-        get_symptom_images_at_all(i, abs_fourier_shift, N=3, display_time=True)
-        get_symptom_images_at_all(i, get_spectrogram, display_time = True) '''
-    
+        get_symptom_images_at_all(i, get_spectrogram, display_time = True) 
+        get_symptom_images_at_all(i, abs_fourier_db_half, N=3, display_time=True)'''
+        
 elif op == "2":
     for i in disease_list:
         get_audio_folder_by_symptom(i)

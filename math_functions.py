@@ -138,3 +138,43 @@ def moving_average(signal_in, Lf):
             result[n] = np.divide(sum(signal_in[n-Lf:N]), Lf + N - 1)
             
     return result
+
+
+def raised_cosine_modified(N, beta):
+    '''Creación de una ventana tipo pulso coseno elevado.
+    
+    Parameters
+    ----------
+    N : int
+        Cantidad de puntos de la ventana.
+    beta : float
+        Parámetro de la función coseno elevado para la apertura de la ventana.
+        
+    Returns
+    -------
+    rc_out : ndarray
+        Ventana pulso coseno elevado de N puntos con el valor de beta ingresado
+    '''
+    # Definición de la frecuencia f
+    f = np.linspace(-1/2, 1/2, N)
+    
+    # Control de parámetro para beta
+    if beta <= 0:
+        beta = 0
+    elif beta >= 1:
+        beta = 1
+    
+    # Definición del vector de salida
+    rc_out = np.array([])
+    
+    # Para punto f
+    for i in f:
+        if abs(i) <= (1 - beta)/2:
+            rc_out = np.concatenate((rc_out, [1]))
+        elif (1 - beta)/2 < abs(i) <= (1 + beta)/2:
+            to_append =  np.cos(np.pi / beta * (abs(i) - (1 - beta)/2))
+            rc_out = np.concatenate((rc_out, [to_append]))
+        else:
+            rc_out = np.concatenate((rc_out, [0]))
+            
+    return rc_out

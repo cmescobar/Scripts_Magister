@@ -27,3 +27,6 @@ Entropy_test/*.txt
 
 # Archivos en Wavelets test
 Wavelets_tests/*.wav
+
+# Archivos generados en db_HR
+Database_manufacturing/db_HR

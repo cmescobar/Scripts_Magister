@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import soundfile as sf
 from ast import literal_eval
 
@@ -386,7 +387,41 @@ def get_heartbeat_points(filename):
     return point_list
 
 
+def get_heartbeat_points_created_db(filename):
+    '''Función que retorna los puntos etiquetados de los sonidos cardíacos
+    de la base de datos creada "Database_manufacturing/db_HR", los cuales 
+    se encuentran separados en la carpeta "Database_manufacturing/db_heart"
+    en "Manual combinations".
+    
+    Parameters
+    ----------
+    filename : str
+        Nombre del archivo a procesar.
+    '''
+    filepath = 'Database_manufacturing/db_heart/Manual combinations'
+    
+    # Revisión de cada uno de los archivos en la carpeta de interés
+    segment_files = [i for i in os.listdir(filepath) if i.endswith('.txt')]
+    
+    # Revisando cada archivo
+    for rev_file in segment_files:
+        # Si el nombre está en la carpeta, se recupera la ubicación del punto
+        if filename in rev_file:
+            with open(f'{filepath}/{rev_file}', 'r', encoding='utf8') as file:
+                # Saltando el encabezado
+                interval_list = literal_eval(file.readline())
+    
+    try:
+        # Definición de la lista de puntos de interés
+        label_points = [int(np.mean(i)) for i in interval_list]
+    except:
+        raise Exception('No se ha encontrado la lista de intervalos para el audio especificado.')
+                
+    return label_points
+
 # Test module
+#a = get_heartbeat_points_created_db('Seed[47651]_S1[61]_S2[62]')
+#print(a)
 
 # get_labeled_heart_sound_files_heartbeatdb(record=True)
 # get_heart_sound_files_heartbeatdb()

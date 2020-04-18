@@ -44,15 +44,6 @@ def zero_cross_rate(audio):
                 for i in range(len(audio) - 1)]) / (2 * len(audio))
 
 
-def centroide_espectral(audio):
-    # Aplicando fft
-    fft_audio = np.fft.fft(audio)
-    # Luego se hace el calculo del centroide
-    return sum([i * abs(fft_audio[i])**2
-                for i in range(round(len(fft_audio) / 2))]) / \
-           sum(abs(fft_audio) ** 2)
-
-
 # Descriptores frecuenciales
 def pendiente_espectral(audio):
     # Aplicando fft
@@ -66,6 +57,15 @@ def pendiente_espectral(audio):
     c = sum([i ** 2 for i in range(round(K / 2))])
     d = sum([i for i in range(round(K / 2))])
     return (K/2*a - b) / (K/2*c - d**2)
+
+
+def centroide_espectral(audio):
+    # Aplicando fft
+    fft_audio = np.fft.fft(audio)
+    # Luego se hace el calculo del centroide
+    return sum([i * abs(fft_audio[i])**2
+                for i in range(round(len(fft_audio) / 2))]) / \
+           sum(abs(fft_audio) ** 2)
 
 
 def flujo_espectral(audio, audio_before):

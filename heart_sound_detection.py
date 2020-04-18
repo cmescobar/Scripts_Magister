@@ -2,8 +2,9 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import soundfile as sf
+from tqdm import tqdm
 from prettytable import PrettyTable
-from file_management import get_heartbeat_points
+from file_management import get_heartbeat_points, get_heartbeat_points_created_db
 from precision_functions import get_precision_info
 from wavelet_functions import get_wavelet_levels, upsample_signal_list
 from thresholding_functions import wavelet_thresholding
@@ -184,7 +185,7 @@ def get_zero_points(signal_in, complement=False, tol=1e-12,
         for i in dif_indexes:
             # Definición del punto posible. Se hace round en caso de que sea un
             # decimal, e int para pasarlo si o si a un elemento tipo "int" para
-            # indexar 
+            # indexar
             out_indexes.append(int(round(np.mean(point_list[begin:i]))))
             # Redefiniendo el comienzo del análisis
             begin = i
@@ -192,23 +193,25 @@ def get_zero_points(signal_in, complement=False, tol=1e-12,
         return out_indexes
 
 
-def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
-                                     method='lowpass', lp_method='fir',
-                                     fir_method='kaiser', gpass=1, gstop=80,
-                                     levels_to_get=[4,5],
-                                     levels_to_decompose=6, wavelet='db4', 
-                                     mode='periodization',
-                                     threshold_criteria='hard', threshold_delta='universal',
-                                     min_percentage=None, print_delta=False,
-                                     plot_show=False, plot_precision_info=True, 
-                                     clean_repeated=True, distance_limit=44100,
-                                     normalize=True):
+def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
+                                 method='lowpass', lp_method='fir',
+                                 fir_method='kaiser', gpass=1, gstop=80,
+                                 levels_to_get=[4,5],
+                                 levels_to_decompose=6, wavelet='db4', 
+                                 mode='periodization',
+                                 threshold_criteria='hard', threshold_delta='universal',
+                                 min_percentage=None, print_delta=False,
+                                 plot_show=False, plot_precision_info=True, 
+                                 clean_repeated=True, distance_limit=44100,
+                                 normalize=True):
     '''Función que genera un archivo .csv con la información recopilada de la detección de 
     puntos cardíacos para cada uno de los archivos etiquetados de la base de datos normal
-    en Heartbeat sounds.
+    en Heartbeat sounds y la base de datos creada en "Database_manufacturing".
     
     Parameters
     ----------
+    filepath : str
+        Dirección a revisar para la base de datos de sonidos cardíacos.
     freq_pass : float
         Frecuencia de corte de la pasa banda.
     freq_stop : float
@@ -270,9 +273,6 @@ def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
     normalize : bool, optional
         Normalización de la señal. Por defecto es True.
     '''
-    # Definición de la carpeta a buscar
-    filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
-    
     # Lista de los sonidos cardíacos a procesar
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
@@ -280,7 +280,7 @@ def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
     tabla = PrettyTable(['Número', 'Nombre del archivo', 
                          'Precision', 'Rank precision',
                          'Cant. etiquetas', 'Cant. detecciones', 'Cant. match',
-                         'Etiquetas sin match', 'Detecciones sin match', 'Accuracy'])
+                         'Etq. sin match', 'Det. sin match', 'Accuracy'])
     
     # Definición de las listas a partir de las cuales se obtendrán las estadísticas
     n = 1
@@ -294,55 +294,76 @@ def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
     detections_unmatched = list()
     accuracy_list = list()
     
-    for audio_name in filenames:
-        print(f'Getting heart sound detection info of {audio_name}...')
-        # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
-        dir_to_copy = f"{filepath}/{audio_name}"
+    for audio_name in tqdm(filenames, ncols=70, desc='Analysis'):
+        try:
+            #print(f'Getting heart sound detection info of {audio_name}...')
+            # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
+            dir_to_copy = f"{filepath}/{audio_name}"
+            
+            # Lectura del archivo
+            audio_file, samplerate = sf.read(dir_to_copy)
+            
+            # Obteniendo los wavelets de interés (upsampleados)
+            wavelets = \
+                get_upsampled_thresholded_wavelets(audio_file, samplerate, 
+                                                freq_pass=freq_pass, freq_stop=freq_stop, 
+                                                method=method, lp_method=lp_method, 
+                                                fir_method=fir_method, 
+                                                gpass=gpass, gstop=gstop, 
+                                                plot_filter=False, levels_to_get=levels_to_get, 
+                                                levels_to_decompose=levels_to_decompose,
+                                                wavelet=wavelet, 
+                                                mode=mode, 
+                                                threshold_criteria=threshold_criteria, threshold_delta=threshold_delta,
+                                                min_percentage=min_percentage, 
+                                                print_delta=print_delta,
+                                                plot_wavelets=False, normalize=normalize)
+            
+            # Definición de la suma de wavelets
+            sum_wavelets = abs(sum(wavelets))
+            
+            # Obtenición de los puntos estimados
+            detected_points = get_zero_points(sum_wavelets, complement=True, tol=1e-12, 
+                                            to_return='center')
+            
+            # Obtención de los puntos etiquetados
+            if 'Database_manufacturing' in filepath:
+                # Definición del nombre del archivo de audio del corazón en la base de datos creada
+                audio_name_heart = audio_name.split(' ')[2].strip('.wav')
+                
+                # Buscando
+                labeled_points = get_heartbeat_points_created_db(audio_name_heart)
+            else:
+                # Buscando
+                labeled_points = get_heartbeat_points(audio_name)
+            
+            # Obteniendo la información de precisión de la detección realizada
+            info = get_precision_info(labeled_points, detected_points, 
+                                    clean_repeated=clean_repeated,
+                                    distance_limit=distance_limit)
+            
+            # Agregando a las informaciones estadísticas
+            mean_precisions.append(info[2][0])
+            sd_precisions.append(info[2][1])
+            rank_precisions.append(info[2][2])
+            q_labels.append(len(labeled_points))
+            q_detections.append(len(detected_points))
+            corresponded_points.append(info[3])
+            labels_unmatched.append(len(info[4]))
+            detections_unmatched.append(len(info[5]))
+            accuracy_list.append(info[0])
         
-        # Lectura del archivo
-        audio_file, samplerate = sf.read(dir_to_copy)
-        
-        # Obteniendo los wavelets de interés (upsampleados)
-        wavelets = \
-            get_upsampled_thresholded_wavelets(audio_file, samplerate, 
-                                               freq_pass=freq_pass, freq_stop=freq_stop, 
-                                               method=method, lp_method=lp_method, 
-                                               fir_method=fir_method, 
-                                               gpass=gpass, gstop=gstop, 
-                                               plot_filter=False, levels_to_get=levels_to_get, 
-                                               levels_to_decompose=levels_to_decompose,
-                                               wavelet=wavelet, 
-                                               mode=mode, 
-                                               threshold_criteria=threshold_criteria, threshold_delta=threshold_delta,
-                                               min_percentage=min_percentage, 
-                                               print_delta=print_delta,
-                                               plot_wavelets=False, normalize=normalize)
-        
-        # Definición de la suma de wavelets
-        sum_wavelets = abs(sum(wavelets))
-        
-        # Obtenición de los puntos estimados
-        detected_points = get_zero_points(sum_wavelets, complement=True, tol=1e-12, 
-                                          to_return='center')
-        
-        # Obtención de los puntos etiquetados
-        labeled_points = get_heartbeat_points(audio_name)
-        
-        # Obteniendo la información de precisión de la detección realizada
-        info = get_precision_info(labeled_points, detected_points, 
-                                  clean_repeated=clean_repeated,
-                                  distance_limit=distance_limit)
-        
-        # Agregando a las informaciones estadísticas
-        mean_precisions.append(info[2][0])
-        sd_precisions.append(info[2][1])
-        rank_precisions.append(info[2][2])
-        q_labels.append(len(labeled_points))
-        q_detections.append(len(detected_points))
-        corresponded_points.append(info[3])
-        labels_unmatched.append(len(info[4]))
-        detections_unmatched.append(len(info[5]))
-        accuracy_list.append(info[0])
+        except:
+            # Agregando a las informaciones estadísticas
+            mean_precisions.append(0)
+            sd_precisions.append(0)
+            rank_precisions.append(0)
+            q_labels.append(0)
+            q_detections.append(0)
+            corresponded_points.append(0)
+            labels_unmatched.append(0)
+            detections_unmatched.append(0)
+            accuracy_list.append(0)
         
         # Escribiendo en la tabla
         tabla.add_row([n, audio_name, 
@@ -352,7 +373,7 @@ def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
         
         n += 1
         
-        print('Completed!\n')
+        #print('Completed!\n')
     
     # Agregando la información resumen (última línea)
     tabla.add_row(['Total', '---' * 4,
@@ -380,9 +401,24 @@ def get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
 
 
 
-
 # Testing module
-levels_to_get = [3]
+levels_to_get = [4,5]
+# Definición de la carpeta a buscar
+#filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
+filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 10_White noise'
+get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
+                            method='lowpass', lp_method='fir',
+                            fir_method='kaiser', gpass=1, gstop=80,
+                            levels_to_get=levels_to_get,
+                            levels_to_decompose=6, wavelet='db4', 
+                            mode='periodization',
+                            threshold_criteria='hard', threshold_delta='universal',
+                            min_percentage=None, print_delta=False,
+                            plot_show=False, plot_precision_info=True, 
+                            clean_repeated=True, distance_limit=5000,
+                            normalize=True)
+
+'''levels_to_get = [3]
 get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
                                 method='lowpass', lp_method='fir',
                                 fir_method='kaiser', gpass=1, gstop=80,
@@ -395,7 +431,6 @@ get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,
                                 clean_repeated=True, distance_limit=5000,
                                 normalize=True)
 
-'''
 # Parámetros de descomposición
 levels_to_get = [3,4,5]
 levels_to_decompose = 6

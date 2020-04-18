@@ -705,6 +705,9 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
         # Sonido cardíaco + respiratorio + ruido
         hr_sound = a_resp * resp_to_sum + a_heart * heart_to_sum + a_noise * white_noise
         
+        # Noramlizando el sonido
+        hr_sound = hr_sound / max(abs(hr_sound))
+        
         # Definición del nombre de los archivos
         hr_filename = f'HR {comb[0][:-4]} {comb[1][:-4]}'
         
@@ -721,7 +724,7 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
 
 # Opciones de panel
 dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
-get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, seed=0)
+get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=10, seed=0)
 
 '''
 filepath = 'Database_manufacturing/db_heart'

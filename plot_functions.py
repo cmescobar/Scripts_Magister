@@ -1,13 +1,15 @@
-from file_management import get_patient_by_symptom, get_dir_audio_by_id, get_heartbeat_points
+import os
+import numpy as np
+import soundfile as sf
+import matplotlib.pyplot as plt
+import descriptor_functions as df
+from tqdm import tqdm
+from file_management import get_patient_by_symptom, get_dir_audio_by_id, get_heartbeat_points,\
+    get_heartbeat_points_created_db
 from heart_sound_detection import get_wavelet_levels, get_upsampled_thresholded_wavelets,\
     get_zero_points
 from filter_and_sampling import downsampling_signal
 from precision_functions import get_precision_info
-import numpy as np
-import soundfile as sf
-import os
-import descriptor_functions as df
-import matplotlib.pyplot as plt
 
 
 def get_symptom_images_by_frame(symptom, func_to_apply="normal",
@@ -396,7 +398,7 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
         print(f"Wavelets of {i} completed!\n")
 
 
-def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
+def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=1000,
                                           method='lowpass', lp_method='fir',
                                           fir_method='kaiser', gpass=1, gstop=80,
                                           levels_to_get=[3,4,5],
@@ -410,7 +412,8 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
     '''Función que permite generar los plots de detección de las señales PCG
     de la base de datos normal del set A en "Heartbeat sounds", incluyendo la
     señal original, la magnitud de la suma de los wavelets en niveles de interés
-    y los puntos originales con los detectados por la implementación.
+    y los puntos originales con los detectados por la implementación. También es 
+    posible usarla para la base de datos creada en "Database_manufacturing"
     
     Parameters
     ----------
@@ -476,13 +479,14 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
         Normalización de la señal. Por defecto es True.
     '''
     # Definición de la carpeta a buscar
-    filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
+    # filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
+    # filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise'
     
     # Lista de los sonidos cardíacos a procesar
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
-    for audio_name in filenames:
-        print(f'Plotting heart sound detection of {audio_name}...')
+    for audio_name in tqdm(filenames, desc='Sounds', ncols=70):
+        # print(f'Plotting heart sound detection of {audio_name}...')
         # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
         dir_to_copy = f"{filepath}/{audio_name}"
         
@@ -513,7 +517,15 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
                                           to_return='center')
         
         # Obtención de los puntos etiquetados
-        labeled_points = get_heartbeat_points(audio_name)
+        if 'Database_manufacturing' in filepath:
+            # Definición del nombre del archivo de audio del corazón en la base de datos creada
+            audio_name_heart = audio_name.split(' ')[2].strip('.wav')
+            
+            # Buscando
+            labeled_points = get_heartbeat_points_created_db(audio_name_heart)
+        else:
+            # Buscando
+            labeled_points = get_heartbeat_points(audio_name)
         
         # Graficando las señales
         plt.figure(figsize=(15,7))
@@ -586,13 +598,26 @@ def get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
         # Mostrando
         if plot_show:
             plt.show()
-        
+        #print('Complete!\n')
         plt.close()
-        print('Complete!\n')
-
 
 
 # Módulo de testeo
+
+filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise'
+get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=1000,
+                                    method='lowpass', lp_method='fir',
+                                    fir_method='kaiser', gpass=1, gstop=80,
+                                    levels_to_get=[4,5],
+                                    levels_to_decompose=6, wavelet='db4', 
+                                    mode='periodization',
+                                    threshold_criteria='hard', threshold_delta='universal',
+                                    min_percentage=None, print_delta=False,
+                                    plot_show=False, plot_precision_info=True, 
+                                    clean_repeated=True, normalize=True)
+
+
+'''
 # Nivel de importancia
 heart_quality = 4
 filepath = f'Interest_Audios/Heart_sound_files/Level {heart_quality}'
@@ -605,16 +630,7 @@ get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
                           threshold_criteria='hard', threshold_delta='universal',
                           min_percentage=None, print_delta=False,
                           normalize=True)
-'''get_detection_vs_labels_heartbeats_db(freq_pass=950, freq_stop=1000,
-                                    method='lowpass', lp_method='fir',
-                                    fir_method='kaiser', gpass=1, gstop=80,
-                                    levels_to_get=[4,5],
-                                    levels_to_decompose=6, wavelet='db4', 
-                                    mode='periodization',
-                                    threshold_criteria='hard', threshold_delta='universal',
-                                    min_percentage=None, print_delta=False,
-                                    plot_show=False, plot_precision_info=True, 
-                                    clean_repeated=True, normalize=True)
+
 
 import pywt
 wavelets_of_interest = pywt.wavelist(kind='discrete')

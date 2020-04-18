@@ -367,6 +367,33 @@ def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
         return  hd_n * window
 
 
+def band_pass_filter(signal_in, samplerate, freq_stop_1=20, freq_pass_1=40, 
+                     freq_pass_2=160, freq_stop_2=180, bp_method='lowpass'):
+    ''' Aplicación de un filtro pasa bandas a una señal de audio.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+    samplerate : int
+    freq_stop_1 : float, optional
+    freq_pass_1 : float, optional
+    freq_pass_2 : float, optional
+    freq_stop_2 : float, optional
+    bp_method : {'lowpass', 'scipy'}, optional
+    
+    Returns
+    -------
+    signal_out:
+        
+    '''
+    if bp_method == 'lowpass':
+        pass
+    
+    elif bp_method == 'scipy':
+        pass
+
+
+
 def downsampling_signal(signal_in, samplerate, freq_pass, freq_stop, 
                         method='lowpass', lp_method='fir',
                         resample_method='interp1d',

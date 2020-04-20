@@ -8,7 +8,7 @@ from file_management import get_heartbeat_points, get_heartbeat_points_created_d
 from precision_functions import get_precision_info
 from wavelet_functions import get_wavelet_levels, upsample_signal_list
 from thresholding_functions import wavelet_thresholding
-from filter_and_sampling import upsampling_signal, downsampling_signal
+from filter_and_sampling import upsampling_signal, downsampling_signal, bandpass_filter
 
 
 def get_upsampled_thresholded_wavelets(signal_in, samplerate, freq_pass=950, freq_stop=1000, 
@@ -194,7 +194,7 @@ def get_zero_points(signal_in, complement=False, tol=1e-12,
 
 
 def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
-                                 method='lowpass', lp_method='fir',
+                                 freqs_bp=[], method='lowpass', lp_method='fir',
                                  fir_method='kaiser', gpass=1, gstop=80,
                                  levels_to_get=[4,5],
                                  levels_to_decompose=6, wavelet='db4', 
@@ -303,9 +303,38 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
             # Lectura del archivo
             audio_file, samplerate = sf.read(dir_to_copy)
             
+            # Aplicación de filtro pasa banda si es que se define una lista de frecuencias
+            if freqs_bp:
+                try:
+                    audio_to_wav = bandpass_filter(audio_file, samplerate, 
+                                                freq_stop_1=freqs_bp[0], 
+                                                freq_pass_1=freqs_bp[1],
+                                                freq_pass_2=freqs_bp[2], 
+                                                freq_stop_2=freqs_bp[3], 
+                                                bp_method='scipy_fir', 
+                                                lp_method='fir', hp_method='fir', 
+                                                lp_process='manual_time_design',
+                                                fir_method='kaiser', gpass=gpass, gstop=gstop, 
+                                                plot_filter=False, correct_by_gd=True, 
+                                                gd_padding='periodic', normalize=True)
+                    
+                    # Definición de la dirección dónde se almacenará la imagen
+                    filesave = f'{filepath}/Precision_info bandpassed {freqs_bp}.csv'
+
+                except:
+                    raise Exception('Frecuencias de pasa banda no están bien definidas. '
+                                    'Por favor, intente nuevamente.')
+            
+            else:
+                # Definición de la dirección dónde se almacenará la imagen
+                filesave = f'{filepath}/Precision_info.csv'
+                
+                # Definición del archivo a procesar
+                audio_to_wav = audio_file
+            
             # Obteniendo los wavelets de interés (upsampleados)
             wavelets = \
-                get_upsampled_thresholded_wavelets(audio_file, samplerate, 
+                get_upsampled_thresholded_wavelets(audio_to_wav, samplerate, 
                                                 freq_pass=freq_pass, freq_stop=freq_stop, 
                                                 method=method, lp_method=lp_method, 
                                                 fir_method=fir_method, 
@@ -392,7 +421,7 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
     
     # Guardando
     print('Saving .csv file...')
-    with open(f'{filepath}/Precision_info.csv', 'a', encoding='utf8') as file:
+    with open(filesave, 'a', encoding='utf8') as file:
         file.write(f'Tabla realizada con niveles {levels_to_get} de los wavelets, y aplicando la '
                    f'función cero para detección de onsets.\n')
         file.write(f'{tabla.get_string()}\n')
@@ -402,10 +431,9 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
 
 
 # Testing module
+'''
 levels_to_get = [4,5]
-# Definición de la carpeta a buscar
-#filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
-filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 10_White noise'
+filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 3_Resp 0_White noise'
 get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
                             method='lowpass', lp_method='fir',
                             fir_method='kaiser', gpass=1, gstop=80,
@@ -417,6 +445,12 @@ get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
                             plot_show=False, plot_precision_info=True, 
                             clean_repeated=True, distance_limit=5000,
                             normalize=True)
+
+
+# Definición de la carpeta a buscar
+#filepath = 'Heartbeat sounds/Generated/normal_a_labeled'
+
+'''
 
 '''levels_to_get = [3]
 get_heartbeat_precision_measures(freq_pass=950, freq_stop=1000,

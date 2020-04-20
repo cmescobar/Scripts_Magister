@@ -8,7 +8,7 @@ from file_management import get_patient_by_symptom, get_dir_audio_by_id, get_hea
     get_heartbeat_points_created_db
 from heart_sound_detection import get_wavelet_levels, get_upsampled_thresholded_wavelets,\
     get_zero_points
-from filter_and_sampling import downsampling_signal
+from filter_and_sampling import downsampling_signal, bandpass_filter
 from precision_functions import get_precision_info
 
 
@@ -163,7 +163,7 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
 
 
 def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000, 
-                                        method='lowpass', lp_method='fir',
+                                        freqs_bp=[], method='lowpass', lp_method='fir',
                                         fir_method='kaiser', gpass=1, gstop=80,
                                         levels_to_get=[3,4,5],
                                         levels_to_decompose=6, wavelet='db4', 
@@ -182,6 +182,9 @@ def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000,
                  la que se toma en cuenta al momento de hacer el 
                  último corte (por ende, si busca samplear a 2kHz,
                  seleccione este parámetro en 1kHz)
+    freqs_bp : list, optional
+        Frecuencias de la aplicación del filtro pasabanda (en orden). En caso de estar vacía
+        o no cumplir con las 4 frecuencias necesarias, no se aplicará filtro. Por defecto es [].
     - method: Método de submuestreo
         - [lowpass]: Se aplica un filtro pasabajos para evitar
                      aliasing de la señal. Luego se submuestrea
@@ -224,24 +227,57 @@ def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000,
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
     # Definición de la carpeta a almacenar
-    filepath_to_save = f'{filepath}/{wavelet}'
+    filepath_to_save = f'{filepath}/{wavelet}/Wavelet decompositon'
     
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
     if not os.path.isdir(filepath_to_save):
         os.makedirs(filepath_to_save)
 
-    for i in filenames:
-        print(f"Plotting wavelets of {i}...")
+    for i in tqdm(filenames, desc='Wavelets', ncols=70):
+        #print(f"Plotting wavelets of {i}...")
         # Cargando los archivos
         audio_file, samplerate = sf.read(f'{filepath}/{i}')
         
-        # Definición de la dirección dónde se almacenará la imagen
-        filesave = f'{filepath_to_save}/{i.strip(".wav")} Wavelets.png'
+        # Definición del texto bandpassed
+        bandpassed_txt = ''
+        
+        # Aplicación de filtro pasa banda si es que se define una lista de frecuencias
+        if freqs_bp:
+            try:
+                audio_to_wav = bandpass_filter(audio_file, samplerate, 
+                                               freq_stop_1=freqs_bp[0], 
+                                               freq_pass_1=freqs_bp[1],
+                                               freq_pass_2=freqs_bp[2], 
+                                               freq_stop_2=freqs_bp[3], 
+                                               bp_method='scipy_fir', 
+                                               lp_method='fir', hp_method='fir', 
+                                               lp_process='manual_time_design',
+                                               fir_method='kaiser', gpass=gpass, gstop=gstop, 
+                                               plot_filter=False, correct_by_gd=True, 
+                                               gd_padding='periodic', normalize=True)
+                
+                # Definición de la dirección dónde se almacenará la imagen
+                filesave = f'{filepath_to_save}/{i.strip(".wav")} Wavelets bandpassed '\
+                           f'{freqs_bp}.png'
+                
+                # Redefinición del texto bandpassed
+                bandpassed_txt = f' bp {freqs_bp}'
+
+            except:
+                raise Exception('Frecuencias de pasa banda no están bien definidas. Por favor, ' 
+                                'intente nuevamente.')
+        
+        else:
+            # Definición de la dirección dónde se almacenará la imagen
+            filesave = f'{filepath_to_save}/{i.strip(".wav")} Wavelets.png'
+            
+            # Definición del archivo a procesar
+            audio_to_wav = audio_file
         
         # Aplicando un downsampling a la señal para disminuir la cantidad de puntos a 
         # procesar
-        _, dwns_signal = downsampling_signal(audio_file, samplerate, 
+        _, dwns_signal = downsampling_signal(audio_to_wav, samplerate, 
                                             freq_pass, freq_stop, 
                                             method=method, 
                                             lp_method=lp_method, 
@@ -251,6 +287,7 @@ def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000,
                                             normalize=normalize)
         
         # Se obtienen los wavelets que interesan
+        #print(f"Wavelets of {i} completed!\n")
         _ = get_wavelet_levels(dwns_signal, 
                                levels_to_get=levels_to_get,
                                levels_to_decompose=levels_to_decompose, 
@@ -262,11 +299,10 @@ def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000,
                                plot_wavelets=True,
                                plot_show=False,
                                plot_save=(True, filesave))
-        print(f"Wavelets of {i} completed!\n")
 
 
 def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
-                              method='lowpass', lp_method='fir',
+                              freqs_bp=[], method='lowpass', lp_method='fir',
                               fir_method='kaiser', gpass=1, gstop=80,
                               levels_to_get=[3,4,5],
                               levels_to_decompose=6, wavelet='db4', mode='periodization',
@@ -277,13 +313,17 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
     a la tasa de muestreo de la señal original, y la señal de audio en el mismo cuadro
     de modo que pueda realizarse una comparación visual
     
-    Parámetros
-    - filepath: Directorio donde se encuenta el set de audios
+    Parameters
+    ----------
+    - filepath: Directorio donde se encuenta el set de audios.
     - freq_pass: Frecuencia de corte de la pasa banda
     - freq_stop: Frecuencia de corte de la rechaza banda. Esta es
                  la que se toma en cuenta al momento de hacer el 
                  último corte (por ende, si busca samplear a 2kHz,
                  seleccione este parámetro en 1kHz)
+    freqs_bp : list, optional
+        Frecuencias de la aplicación del filtro pasabanda (en orden). En caso de estar vacía
+        o no cumplir con las 4 frecuencias necesarias, no se aplicará filtro. Por defecto es [].
     - method: Método de submuestreo
         - [lowpass]: Se aplica un filtro pasabajos para evitar
                      aliasing de la señal. Luego se submuestrea
@@ -328,24 +368,57 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
     # Definición de la carpeta a almacenar
-    filepath_to_save = f'{filepath}/{wavelet}'
+    filepath_to_save = f'{filepath}/{wavelet}/Sum Wavelet vs audio'
     
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
     if not os.path.isdir(filepath_to_save):
         os.makedirs(filepath_to_save)
     
-    for i in filenames:
-        print(f"Plotting wavelet sum of {i}...")
+    for i in tqdm(filenames, desc='Wavelets', ncols=70):
+        # print(f"Plotting wavelet sum of {i}...")
         # Cargando los archivos
         audio_file, samplerate = sf.read(f'{filepath}/{i}')
         
-        # Definición de la dirección dónde se almacenará la imagen
-        filesave = f'{filepath_to_save}/{i.strip(".wav")} Wavelet_sum levels {levels_to_get}.svg'
+        # Definición del texto bandpassed
+        bandpassed_txt = ''
+        
+        # Aplicación de filtro pasa banda si es que se define una lista de frecuencias
+        if freqs_bp:
+            try:
+                audio_to_wav = bandpass_filter(audio_file, samplerate, 
+                                               freq_stop_1=freqs_bp[0], 
+                                               freq_pass_1=freqs_bp[1],
+                                               freq_pass_2=freqs_bp[2], 
+                                               freq_stop_2=freqs_bp[3], 
+                                               bp_method='scipy_fir', 
+                                               lp_method='fir', hp_method='fir', 
+                                               lp_process='manual_time_design',
+                                               fir_method='kaiser', gpass=gpass, gstop=gstop, 
+                                               plot_filter=False, correct_by_gd=True, 
+                                               gd_padding='periodic', normalize=True)
+                
+                # Definición de la dirección dónde se almacenará la imagen
+                filesave = f'{filepath_to_save}/Bandpassed {freqs_bp} {i.strip(".wav")} '\
+                           f'Levels {levels_to_get}.png'
+                
+                # Redefinición del texto bandpassed
+                bandpassed_txt = f' bp {freqs_bp}'
+
+            except:
+                raise Exception('Frecuencias de pasa banda no están bien definidas. Por favor, ' 
+                                'intente nuevamente.')
+        
+        else:
+            # Definición de la dirección dónde se almacenará la imagen
+            filesave = f'{filepath_to_save}/{i.strip(".wav")} Levels {levels_to_get}.png'
+            
+            # Definición del archivo a procesar
+            audio_to_wav = audio_file
         
         # Obteniendo los wavelets de interés (upsampleados)
         wavelets = \
-            get_upsampled_thresholded_wavelets(audio_file, samplerate, 
+            get_upsampled_thresholded_wavelets(audio_to_wav, samplerate, 
                                                freq_pass=freq_pass, freq_stop=freq_stop, 
                                                method=method, lp_method=lp_method, 
                                                fir_method=fir_method, 
@@ -372,18 +445,19 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
         plt.figure(figsize=(13,9))
         
         plt.subplot(2,1,1)
-        plt.plot(audio_file)
-        plt.plot(abs(wavelet_sum))
         #plt.plot(heart_sound_pos, [0] * len(heart_sound_pos), 'gx')
         for x_pos in heart_sound_pos:
             plt.axvline(x=x_pos, color='lime')
+        plt.plot(audio_to_wav)
+        plt.plot(abs(wavelet_sum))
         plt.ylabel('Audio\nOriginal')
         
         plt.subplot(2,1,2)
         plt.plot(wavelet_sum)
         plt.ylabel('Suma\nWavelets')
         
-        plt.suptitle(f'Original vs Wavelets {i.strip(".wav")} levels {levels_to_get}')
+        plt.suptitle(f'Original vs Wavelets {i.strip(".wav")} levels {levels_to_get}'
+                     f' {bandpassed_txt}')
         
         # Guardando
         plt.savefig(f'{filesave}')
@@ -392,14 +466,13 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
         if plot_show:
             plt.show()
         
+        #print(f"Wavelets of {i} completed!\n")
         # Se cierra el plot
         plt.close()
-        
-        print(f"Wavelets of {i} completed!\n")
 
 
 def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=1000,
-                                          method='lowpass', lp_method='fir',
+                                          freqs_bp=[], method='lowpass', lp_method='fir',
                                           fir_method='kaiser', gpass=1, gstop=80,
                                           levels_to_get=[3,4,5],
                                           levels_to_decompose=6, wavelet='db4', 
@@ -417,12 +490,17 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
     
     Parameters
     ----------
-    freq_pass : float
-        Frecuencia de corte de la pasa banda.
-    freq_stop : float
-        Frecuencia de corte de la rechaza banda. Esta es la que se toma en cuenta al
+    filepath : str
+        Directorio donde se encuenta el set de audios.
+    freq_pass : float, optional
+        Frecuencia de corte de la pasa banda (en Hz). Por defecto es 950.
+    freq_stop : float, optional
+        Frecuencia de corte de la rechaza banda (en Hz). Esta es la que se toma en cuenta al
         momento de hacer el último corte (por ende, si busca samplear a 2kHz, seleccione 
-        este parámetro en 1kHz).
+        este parámetro en 1kHz). Por defecto es 1000.
+    freqs_bp : list, optional
+        Frecuencias de la aplicación del filtro pasabanda (en orden). En caso de estar vacía
+        o no cumplir con las 4 frecuencias necesarias, no se aplicará filtro. Por defecto es [].
     method : {'lowpass', 'cut', 'resample', 'resample poly'}, optional
         Método utilizado para submuestreo. Para 'lowpass', se aplica un filtro pasabajos 
         para evitar aliasing de la señal, luego se submuestrea. Para 'cut', se corta en la 
@@ -485,6 +563,14 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
     # Lista de los sonidos cardíacos a procesar
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
+    # Definición de la carpeta a almacenar
+    filepath_to_save = f'{filepath}/{wavelet}/Heart sound labels'
+    
+    # Preguntar si es que la carpeta que almacenará las imágenes se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(filepath_to_save):
+        os.makedirs(filepath_to_save)
+    
     for audio_name in tqdm(filenames, desc='Sounds', ncols=70):
         # print(f'Plotting heart sound detection of {audio_name}...')
         # Dirección del archivo en la carpeta madre. Este archivo es el que se copiará
@@ -493,9 +579,44 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
         # Lectura del archivo
         audio_file, samplerate = sf.read(dir_to_copy)
         
+        # Definición del texto bandpassed
+        bandpassed_txt = ''
+        
+        # Aplicación de filtro pasa banda si es que se define una lista de frecuencias
+        if freqs_bp:
+            try:
+                audio_to_wav = bandpass_filter(audio_file, samplerate, 
+                                               freq_stop_1=freqs_bp[0], 
+                                               freq_pass_1=freqs_bp[1],
+                                               freq_pass_2=freqs_bp[2], 
+                                               freq_stop_2=freqs_bp[3], 
+                                               bp_method='scipy_fir', 
+                                               lp_method='fir', hp_method='fir', 
+                                               lp_process='manual_time_design',
+                                               fir_method='kaiser', gpass=gpass, gstop=gstop, 
+                                               plot_filter=False, correct_by_gd=True, 
+                                               gd_padding='periodic', normalize=True)
+                
+                # Definición de la dirección dónde se almacenará la imagen
+                filesave = f'{filepath_to_save}/Bandpassed {freqs_bp} '\
+                           f'{audio_name.strip(".wav")} Levels {levels_to_get}'
+                
+                # Redefinición del texto bandpassed
+                bandpassed_txt = f' bp {freqs_bp}'
+
+            except:
+                raise Exception('Frecuencias de pasa banda no están bien definidas. Por favor, ' 
+                                'intente nuevamente.')
+        
+        else:
+            audio_to_wav = audio_file
+            
+            # Definición de la dirección dónde se almacenará la imagen
+            filesave = f'{filepath_to_save}/{audio_name.strip(".wav")} Levels {levels_to_get}'
+        
         # Obteniendo los wavelets de interés (upsampleados)
         wavelets = \
-            get_upsampled_thresholded_wavelets(audio_file, samplerate, 
+            get_upsampled_thresholded_wavelets(audio_to_wav, samplerate, 
                                                freq_pass=freq_pass, freq_stop=freq_stop, 
                                                method=method, lp_method=lp_method, 
                                                fir_method=fir_method, 
@@ -534,7 +655,7 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
         
         if plot_precision_info:
             # Dirección en la cual se almacenará este nuevo archivo
-            dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection and info.png"
+            dir_to_paste = f"{filesave} detection and info.png"
             
             # Obteniendo la información de precisión de la detección realizada
             info = get_precision_info(labeled_points, detected_points, 
@@ -578,7 +699,7 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
         
         else:
             # Dirección en la cual se almacenará este nuevo archivo
-            dir_to_paste = f"{filepath}/{audio_name.strip('.wav')} detection.png"
+            dir_to_paste = f"{filesave}.png"
             
             # Graficando las etiquetas no procesadas
             plt.plot(labeled_points, [0] * len(labeled_points), color='lime', 
@@ -590,7 +711,7 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
             plt.legend(loc='upper right', bbox_to_anchor=(1, 1), fontsize=8)
         
         # Agregar titulo
-        plt.suptitle(f'Detection points of {audio_name}')
+        plt.suptitle(f'Detection points of {audio_name} {bandpassed_txt}')
         
         # Guardando
         plt.savefig(dir_to_paste)
@@ -604,17 +725,57 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
 
 # Módulo de testeo
 
-filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise'
-get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=1000,
-                                    method='lowpass', lp_method='fir',
-                                    fir_method='kaiser', gpass=1, gstop=80,
-                                    levels_to_get=[4,5],
-                                    levels_to_decompose=6, wavelet='db4', 
-                                    mode='periodization',
-                                    threshold_criteria='hard', threshold_delta='universal',
-                                    min_percentage=None, print_delta=False,
-                                    plot_show=False, plot_precision_info=True, 
-                                    clean_repeated=True, normalize=True)
+filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 10_Resp 0_White noise'
+
+filepaths = ['Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise',
+             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 2_Resp 0_White noise',
+             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 3_Resp 0_White noise',
+             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 5_Resp 0_White noise',
+             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 10_Resp 0_White noise']
+
+freqs_bp = [50,100,250,300]
+
+for i in filepaths:
+    print(i)
+    get_detection_vs_labels_heartbeats_db(i, freq_pass=950, freq_stop=1000,
+                                        freqs_bp=freqs_bp,
+                                        method='lowpass', lp_method='fir',
+                                        fir_method='kaiser', gpass=1, gstop=80,
+                                        levels_to_get=[3,4,5],
+                                        levels_to_decompose=6, wavelet='db4', 
+                                        mode='periodization',
+                                        threshold_criteria='hard', threshold_delta='universal',
+                                        min_percentage=None, print_delta=False,
+                                        plot_show=False, plot_precision_info=True, 
+                                        clean_repeated=True, normalize=True)
+
+
+
+'''
+get_wavelets_images_of_heart_sounds(i, freq_pass=950, freq_stop=1000, 
+                                        freqs_bp=freqs_bp, method='lowpass', 
+                                        lp_method='fir',
+                                        fir_method='kaiser', gpass=1, gstop=80,
+                                        levels_to_get='all',
+                                        levels_to_decompose=6, wavelet='db4', 
+                                        mode='periodization',
+                                        threshold_criteria='hard', 
+                                        threshold_delta='universal',
+                                        min_percentage=None, print_delta=False,
+                                        normalize=True)
+
+get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
+                          freqs_bp=freqs_bp,
+                          method='lowpass', lp_method='fir',
+                          fir_method='kaiser', gpass=1, gstop=80,
+                          levels_to_get=[3,4,5],
+                          levels_to_decompose=6, wavelet='db4', mode='periodization',
+                          threshold_criteria='hard', threshold_delta='universal',
+                          min_percentage=None, print_delta=False,
+                          normalize=True)
+
+
+'''
 
 
 '''

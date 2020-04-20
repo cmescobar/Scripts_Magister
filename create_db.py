@@ -724,7 +724,7 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
 
 # Opciones de panel
 dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
-get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=10, seed=0)
+get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=3, a_noise=0, seed=0)
 
 '''
 filepath = 'Database_manufacturing/db_heart'

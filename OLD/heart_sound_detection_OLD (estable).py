@@ -296,25 +296,22 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
     # Definición de la tabla a guardar
-    tabla = PrettyTable(['Num', 'Nombre del archivo', 
-                         'Distancia', 'Rank dist.',
-                         'Q. etiqs', 'Q. detecs', 'Cant. match',
-                         'Etq. sin match', 'Det. sin match', 
-                         'Recall', 'Precision', 'F1 score'])
+    tabla = PrettyTable(['Número', 'Nombre del archivo', 
+                         'Precision', 'Rank precision',
+                         'Cant. etiquetas', 'Cant. detecciones', 'Cant. match',
+                         'Etq. sin match', 'Det. sin match', 'Accuracy'])
     
     # Definición de las listas a partir de las cuales se obtendrán las estadísticas
     n = 1
-    mean_distances = list()
-    sd_distances = list()
-    rank_distances = list()
+    mean_precisions = list()
+    sd_precisions = list()
+    rank_precisions = list()
     q_labels = list()
     q_detections = list()
     corresponded_points = list()
     labels_unmatched = list()
     detections_unmatched = list()
-    recall_list = list()
-    precision_list = list()
-    f1_list = list()
+    accuracy_list = list()
     
     for audio_name in tqdm(filenames, ncols=70, desc='Analysis'):
         try:
@@ -341,8 +338,7 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
                                                 gd_padding='periodic', normalize=True)
                     
                     # Definición de la dirección dónde se almacenará la imagen
-                    filesave = f'{filepath}/{wavelet}/Precision_info bandpassed {freqs_bp} '\
-                               f'Corrected.csv'
+                    filesave = f'{filepath}/{wavelet}/Precision_info bandpassed {freqs_bp}.csv'
 
                 except:
                     raise Exception('Frecuencias de pasa banda no están bien definidas. '
@@ -350,7 +346,7 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
             
             else:
                 # Definición de la dirección dónde se almacenará la imagen
-                filesave = f'{filepath}/{wavelet}/Precision_info Corrected.csv'
+                filesave = f'{filepath}/{wavelet}/Precision_info.csv'
                 
                 # Definición del archivo a procesar
                 audio_to_wav = audio_file
@@ -396,48 +392,37 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
                                     clean_repeated=clean_repeated,
                                     distance_limit=distance_limit)
             
-            # Definición f1
-            recall, precision = info[:2]
-            f1 = 2 * (recall * precision) / (recall + precision)
-            
             # Agregando a las informaciones estadísticas
-            mean_distances.append(info[3][0])
-            sd_distances.append(info[3][1])
-            rank_distances.append(info[3][2])
+            mean_precisions.append(info[2][0])
+            sd_precisions.append(info[2][1])
+            rank_precisions.append(info[2][2])
             q_labels.append(len(labeled_points))
             q_detections.append(len(detected_points))
-            corresponded_points.append(info[4])
-            labels_unmatched.append(len(info[5]))
-            detections_unmatched.append(len(info[6]))
-            recall_list.append(recall)
-            precision_list.append(precision)
-            f1_list.append(f1)
+            corresponded_points.append(info[3])
+            labels_unmatched.append(len(info[4]))
+            detections_unmatched.append(len(info[5]))
+            accuracy_list.append(info[0])
 
             # Escribiendo en la tabla
-            tabla.add_row([n, audio_name.strip('.wav'), 
-                        '{:.2f} +- {:.2f}'.format(info[3][0], info[3][1]), info[3][2],
-                        len(labeled_points), len(detected_points), info[4],
-                        len(info[5]), len(info[6]), '{:.2f} %'.format(recall * 100),
-                        '{:.2f} %'.format(precision * 100), '{:.2f} %'.format(f1 * 100)])
+            tabla.add_row([n, audio_name, 
+                        '{:.2f} +- {:.2f}'.format(info[2][0], info[2][1]), info[2][2],
+                        len(labeled_points), len(detected_points), info[3],
+                        len(info[4]), len(info[5]), '{:.3f} %'.format(info[0] * 100)])
 
         except:
             # Agregando a las informaciones estadísticas
-            mean_distances.append(0)
-            sd_distances.append(0)
-            rank_distances.append(0)
+            mean_precisions.append(0)
+            sd_precisions.append(0)
+            rank_precisions.append(0)
             q_labels.append(0)
             q_detections.append(0)
             corresponded_points.append(0)
             labels_unmatched.append(0)
             detections_unmatched.append(0)
-            recall_list.append(0)
-            recall_list.append(0)
-            precision_list.append(0)
-            f1_list.append(0)
+            accuracy_list.append(0)
         
             # Escribiendo en la tabla
-            tabla.add_row([n, audio_name.strip('.wav'), '-', '-', '-', '-', '-', '-', '-', '-',
-                           '-', '-'])
+            tabla.add_row([n, audio_name, '-', '-', '-', '-', '-', '-', '-', '-'])
         
         n += 1
         
@@ -445,8 +430,8 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
     
     # Agregando la información resumen (última línea)
     tabla.add_row(['Total', '---' * 4,
-                   "{:.2f} +- {:.2f}".format(np.mean(mean_distances), np.mean(sd_distances)),
-                   "{:.2f} +- {:.2f}".format(np.mean(rank_distances), np.std(rank_distances)),
+                   "{:.2f} +- {:.2f}".format(np.mean(mean_precisions), np.mean(sd_precisions)),
+                   "{:.2f} +- {:.2f}".format(np.mean(rank_precisions), np.std(rank_precisions)),
                    "{:.2f} +- {:.2f}".format(np.mean(q_labels), np.std(q_labels)),
                    "{:.2f} +- {:.2f}".format(np.mean(q_detections), np.std(q_detections)),
                    "{:.2f} +- {:.2f}".format(np.mean(corresponded_points), 
@@ -454,12 +439,8 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
                    "{:.2f} +- {:.2f}".format(np.mean(labels_unmatched), np.std(labels_unmatched)),
                    "{:.2f} +- {:.2f}".format(np.mean(detections_unmatched), 
                                              np.std(detections_unmatched)),
-                   "{:.2f} +- {:.2f} %".format(np.mean(recall_list) * 100, 
-                                               np.std(recall_list) * 100),
-                   "{:.2f} +- {:.2f} %".format(np.mean(precision_list) * 100, 
-                                               np.std(precision_list) * 100),
-                   "{:.2f} +- {:.2f} %".format(np.mean(f1_list) * 100, 
-                                               np.std(f1_list) * 100)
+                   "{:.2f} +- {:.2f} %".format(np.mean(accuracy_list) * 100, 
+                                               np.std(accuracy_list) * 100)
                    ])
     
     # Guardando
@@ -474,6 +455,7 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
 
 
 # Testing module
+
 filepaths = ['Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise',
              'Database_manufacturing/db_HR/Seed-0 - 1_Heart 2_Resp 0_White noise',
              'Database_manufacturing/db_HR/Seed-0 - 1_Heart 3_Resp 0_White noise',

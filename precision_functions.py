@@ -100,7 +100,8 @@ def get_precision_info(reference_list, compare_list, clean_repeated=True,
     -------
     list
         Retorna una lista de información en orden:
-        1. Accuracy (# detecciones correctas / # ptos. de referencia)
+        1. Recall (# Etiquetas detectadas / # Etiquetas totales)
+        2. Precisión (# Etiquetas detectadas / # Detecciones totales)
         2. Lista de puntos correspondientes 1 a 1
         3. Información de precisión (media, desv. estándar y rango)
         4. Cantidad de detecciones correctamente realizadas
@@ -145,24 +146,27 @@ def get_precision_info(reference_list, compare_list, clean_repeated=True,
     ## Cantidad de detecciones correctamente realizadas
     q_classified_ok = correspond_list.shape[0]
     
-    ## Accuracy
-    accuracy = q_classified_ok / len(reference_list)
+    ## Recall
+    recall = q_classified_ok / len(reference_list)
     
-    ## Precisiones
+    ## Precision
+    precision = q_classified_ok / len(compare_list)
+    
+    ## Distancias
     distances = abs(correspond_list[:, 0] - correspond_list[:, 1])
     
-    mean_precision = np.mean(distances)
-    sd_precision = np.std(distances)
-    rank_precision = np.max(distances)
+    mean_distances = np.mean(distances)
+    sd_distances = np.std(distances)
+    rank_distances = np.max(distances)
     
-    ### Definición del pack precisión
-    pack_precision = (mean_precision, sd_precision, rank_precision)
+    ### Definición del pack distancia
+    pack_distances = (mean_distances, sd_distances, rank_distances)
 
     ## Puntos sin clasificar
     unclasified_references_point, unclasified_compare_point =\
         get_unclasified_points(reference_list, compare_list, correspond_list)
     
-    return (accuracy, correspond_list, pack_precision, q_classified_ok,
+    return (recall, precision, correspond_list, pack_distances, q_classified_ok,
             unclasified_references_point, unclasified_compare_point)
 
 

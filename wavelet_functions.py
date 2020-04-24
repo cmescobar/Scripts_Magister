@@ -423,8 +423,8 @@ def get_wavelet_levels(signal_in, levels_to_decompose=6, levels_to_get='all', wa
 
 
 def upsample_signal_list(signal_list, samplerate, new_rate, levels_to_get, 
-                         N_desired, method='lowpass', trans_width=50, 
-                         lp_method='fir', fir_method='kaiser', gpass=1, 
+                         N_desired, resample_method='interp1d', stret_method='lowpass',
+                         lp_method='fir', fir_method='kaiser', trans_width=50, gpass=1, 
                          gstop=80, plot_filter=False, plot_signals=False,
                          plot_wavelets=True, normalize=True):
     '''Función que permite upsamplear una lista de señales a una tasa de muestreo
@@ -473,14 +473,14 @@ def upsample_signal_list(signal_list, samplerate, new_rate, levels_to_get,
         resampled_signal = upsampling_signal(signal_list[i], 
                                              samplerate / (2 ** (levels_to_get[i])), 
                                              new_rate, N_desired=N_desired, 
-                                             method=method,
-                                             trans_width=trans_width, 
-                                             lp_method=lp_method, 
-                                             fir_method=fir_method, 
+                                             resample_method=resample_method,
+                                             stret_method=stret_method, lp_method=lp_method, 
+                                             fir_method=fir_method, trans_width=trans_width,
                                              gpass=gpass, gstop=gstop, 
-                                             plot_filter=plot_filter, 
-                                             plot_signals=plot_signals,
+                                             correct_by_gd=True, gd_padding='periodic',
+                                             plot_filter=False, plot_signals=plot_signals,
                                              normalize=normalize)
+
         # Guardando
         upsampled_signals.append(resampled_signal)
     

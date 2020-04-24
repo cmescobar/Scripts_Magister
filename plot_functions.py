@@ -302,7 +302,8 @@ def get_wavelets_images_of_heart_sounds(filepath, freq_pass=950, freq_stop=1000,
 
 
 def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
-                              freqs_bp=[], method='lowpass', lp_method='fir',
+                              freqs_bp=[], upsample_method='interp1d', 
+                              down_stret_method='lowpass', lp_method='fir',
                               fir_method='kaiser', gpass=1, gstop=80,
                               levels_to_get=[3,4,5],
                               levels_to_decompose=6, wavelet='db4', mode='periodization',
@@ -324,7 +325,13 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
     freqs_bp : list, optional
         Frecuencias de la aplicación del filtro pasabanda (en orden). En caso de estar vacía
         o no cumplir con las 4 frecuencias necesarias, no se aplicará filtro. Por defecto es [].
-    - method: Método de submuestreo
+    upsample_method : {'resample', 'resample poly', 'interp1d', 'stretching'}, optional
+        Método usado para resamplear. Para 'resample', se aplica la función resample de scipy.
+        Para 'resample_poly', se aplica la función resample_poly de scipy. Para 'interp1d',
+        se aplica la función 'interp1d' de scipy. Y para 'stretching' se realiza el 
+        estiramiento a la señal por un parámetro "N_st" obtenido automáticamente. Por defecto 
+        es 'interp1d'.
+    - down_stret_method: Método de submuestreo
         - [lowpass]: Se aplica un filtro pasabajos para evitar
                      aliasing de la señal. Luego se submuestrea
         - [cut]: Simplemente se corta en la frecuencia de interés
@@ -420,13 +427,13 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
         wavelets = \
             get_upsampled_thresholded_wavelets(audio_to_wav, samplerate, 
                                                freq_pass=freq_pass, freq_stop=freq_stop, 
-                                               method=method, lp_method=lp_method, 
-                                               fir_method=fir_method, 
-                                               gpass=gpass, gstop=gstop, 
+                                               upsample_method=upsample_method,
+                                               down_stret_method=down_stret_method,
+                                               lp_method=lp_method, fir_method=fir_method, 
+                                               gpass=gpass, gstop=gstop,  
                                                plot_filter=False, levels_to_get=levels_to_get, 
                                                levels_to_decompose=levels_to_decompose,
-                                               wavelet=wavelet, 
-                                               mode=mode, 
+                                               wavelet=wavelet, mode=mode, 
                                                threshold_criteria=threshold_criteria, threshold_delta=threshold_delta,
                                                min_percentage=min_percentage, 
                                                print_delta=print_delta,
@@ -472,7 +479,8 @@ def get_sum_wavelets_vs_audio(filepath, freq_pass=950, freq_stop=1000,
 
 
 def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=1000,
-                                          freqs_bp=[], method='lowpass', lp_method='fir',
+                                          freqs_bp=[], upsample_method='interp1d', 
+                                          down_stret_method='lowpass', lp_method='fir',
                                           fir_method='kaiser', gpass=1, gstop=80,
                                           levels_to_get=[3,4,5],
                                           levels_to_decompose=6, wavelet='db4', 
@@ -501,7 +509,13 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
     freqs_bp : list, optional
         Frecuencias de la aplicación del filtro pasabanda (en orden). En caso de estar vacía
         o no cumplir con las 4 frecuencias necesarias, no se aplicará filtro. Por defecto es [].
-    method : {'lowpass', 'cut', 'resample', 'resample poly'}, optional
+    upsample_method : {'resample', 'resample poly', 'interp1d', 'stretching'}, optional
+        Método usado para resamplear. Para 'resample', se aplica la función resample de scipy.
+        Para 'resample_poly', se aplica la función resample_poly de scipy. Para 'interp1d',
+        se aplica la función 'interp1d' de scipy. Y para 'stretching' se realiza el 
+        estiramiento a la señal por un parámetro "N_st" obtenido automáticamente. Por defecto 
+        es 'interp1d'.
+    down_stret_method : {'lowpass', 'cut', 'resample', 'resample poly'}, optional
         Método utilizado para submuestreo. Para 'lowpass', se aplica un filtro pasabajos 
         para evitar aliasing de la señal, luego se submuestrea. Para 'cut', se corta en la 
         frecuencia de interés. Para 'resample', se aplica la función resample de scipy. Y
@@ -618,13 +632,13 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
         wavelets = \
             get_upsampled_thresholded_wavelets(audio_to_wav, samplerate, 
                                                freq_pass=freq_pass, freq_stop=freq_stop, 
-                                               method=method, lp_method=lp_method, 
-                                               fir_method=fir_method, 
-                                               gpass=gpass, gstop=gstop, 
+                                               upsample_method=upsample_method,
+                                               down_stret_method=down_stret_method,
+                                               lp_method=lp_method, fir_method=fir_method, 
+                                               gpass=gpass, gstop=gstop,  
                                                plot_filter=False, levels_to_get=levels_to_get, 
                                                levels_to_decompose=levels_to_decompose,
-                                               wavelet=wavelet, 
-                                               mode=mode, 
+                                               wavelet=wavelet, mode=mode, 
                                                threshold_criteria=threshold_criteria, threshold_delta=threshold_delta,
                                                min_percentage=min_percentage, 
                                                print_delta=print_delta,
@@ -725,21 +739,22 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
 
 # Módulo de testeo
 
-filepath = 'Database_manufacturing/db_HR/Seed-0 - 1_Heart 10_Resp 0_White noise'
+filepath = 'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 10_Resp 0_White noise'
 
-filepaths = ['Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 2_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 3_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 5_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 10_Resp 0_White noise']
+filepaths = \
+    ['Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 1_Resp 0_White noise',
+     'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 2_Resp 0_White noise',
+     'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 3_Resp 0_White noise',
+     'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 5_Resp 0_White noise',
+     'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 10_Resp 0_White noise']
 
 freqs_bp = [50,100,250,300]
 
 for i in filepaths:
     print(i)
     get_detection_vs_labels_heartbeats_db(i, freq_pass=950, freq_stop=1000,
-                                        freqs_bp=freqs_bp,
-                                        method='lowpass', lp_method='fir',
+                                        freqs_bp=freqs_bp, upsample_method='interp1d', 
+                                        down_stret_method='lowpass', lp_method='fir',
                                         fir_method='kaiser', gpass=1, gstop=80,
                                         levels_to_get=[3,4,5],
                                         levels_to_decompose=6, wavelet='db4', 

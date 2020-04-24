@@ -500,10 +500,9 @@ def downsampling_signal(signal_in, samplerate, freq_pass, freq_stop,
 
 
 def upsampling_signal(signal_in, samplerate, new_samplerate,
-                      N_desired=None, method='lowpass',
-                      trans_width=50, lp_method='fir',
-                      resample_method='interp1d',
-                      fir_method='kaiser', gpass=1, gstop=80, 
+                      N_desired=None, resample_method='interp1d',
+                      stret_method='lowpass', lp_method='fir', 
+                      fir_method='kaiser', trans_width=50, gpass=1, gstop=80, 
                       correct_by_gd=True, gd_padding='periodic',
                       plot_filter=False, plot_signals=False,
                       normalize=True):
@@ -519,28 +518,30 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         Tasa de muestreo de la señal "signal_in".
     new_samplerate : int
         Tasa de muestreo deseada de la señal.
-    method : {'lowpass', 'cut'}, optional
-        Método utilizado para filtrar la señal. Para 'lowpass', se aplica un filtro pasabajos 
-        para evitar aliasing de la señal, luego se submuestrea. Para 'cut', se corta en la 
-        frecuencia de interés. Por defecto es 'lowpass'.
-    trans_width : int 
-        Banda de transición entre la frecuencia de corte de la señal original (que representa 
-        la frecuencia de corte del rechaza banda) y la pasa banda del filtro aplicado para 
-        eliminar las repeticiones [1]
-    lp_method : {'fir', 'iir'}, optional
-        Método de filtrado para elección lowpass. Para 'fir' se implementa un filtro FIR.
-        Para 'iir' se implementa un filtro IIR. Por defecto es 'fir'.
+    N_desired : int or NoneType, optional
+        Cantidad de puntos deseadas en la señal de salida. Por defecto es None.
     resample_method : {'resample', 'resample poly', 'interp1d', 'stretching'}, optional
         Método usado para resamplear. Para 'resample', se aplica la función resample de scipy.
         Para 'resample_poly', se aplica la función resample_poly de scipy. Para 'interp1d',
         se aplica la función 'interp1d' de scipy. Y para 'stretching' se realiza el 
         estiramiento a la señal por un parámetro "N_st" obtenido automáticamente. Por defecto 
         es 'interp1d'.
+    stret_method : {'lowpass', 'cut'}, optional
+        Método utilizado para filtrar la señal. Para 'lowpass', se aplica un filtro pasabajos 
+        para evitar aliasing de la señal, luego se submuestrea. Para 'cut', se corta en la 
+        frecuencia de interés. Por defecto es 'lowpass'.
+    lp_method : {'fir', 'iir'}, optional
+        Método de filtrado para elección lowpass. Para 'fir' se implementa un filtro FIR.
+        Para 'iir' se implementa un filtro IIR. Por defecto es 'fir'.
     fir_method : {'window', 'kaiser', 'remez'}, optional
         Método de construcción del filtro FIR en caso de seleccionar el método lowpass con 
         filtro FIR. Para 'window', se usa construye por método de la ventana. Para 'kaiser',
         se cosntruye por método de ventana kaiser. Para 'remez', se construye por algoritmo 
         remez. Por defecto se usa 'kaiser'.
+    trans_width : int 
+        Banda de transición entre la frecuencia de corte de la señal original (que representa 
+        la frecuencia de corte del rechaza banda) y la pasa banda del filtro aplicado para 
+        eliminar las repeticiones [1].
     gpass : float, optional
         Ganancia en dB de la magnitud de la pasa banda. Por defecto es 1 (dB).
     gstop : float, optional 
@@ -583,7 +584,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
                 signal_stretched = signal_stretched[:N_desired]
 
 
-        if method == 'lowpass':
+        if stret_method == 'lowpass':
             # Definición de las bandas del filtro
             freq_stop = samplerate / 2
             freq_pass = freq_stop - trans_width
@@ -596,7 +597,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
                                            gd_padding=gd_padding,
                                            plot_filter=plot_filter, 
                                            normalize=normalize)    
-        elif method == 'cut':
+        elif stret_method == 'cut':
             # Definición de la frecuencia de corte
             freq_stop = samplerate / 2
             # Método de corte
@@ -607,7 +608,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         if N_desired is not None:
             N_out = N_desired
         else:
-            N_out = int(len(signal_in) / new_samplerate * samplerate)
+            N_out = int(len(signal_in) / samplerate * new_samplerate)
         
         signal_out = signal.resample(signal_in, N_out)
     
@@ -617,7 +618,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         if N_desired is not None:
             N_out = N_desired
         else:
-            N_out = int(len(signal_in) / new_samplerate * samplerate)
+            N_out = int(len(signal_in) / samplerate * new_samplerate)
         
         # Señal resampleada
         signal_out = signal.resample_poly(signal_in, N_out, len(signal_in))
@@ -629,7 +630,7 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         if N_desired is not None:
             N_out = N_desired
         else:
-            N_out = int(len(signal_in) / new_samplerate * samplerate)
+            N_out = int(len(signal_in) / samplerate * new_samplerate)
         
         # Vector de referencia en el eje "x" del vector de salida
         x_new = np.linspace(0, len(signal_in) - 1, N_out)
@@ -1440,12 +1441,17 @@ new_rate, dwns_signal = downsampling_signal(audio, samplerate, 950, 1000,
                                             plot_filter=False, normalize=True)
 
 restored_signal = upsampling_signal(dwns_signal, new_rate, samplerate,
-                                    N_desired=None, method='lowpass',
-                                    trans_width=50, lp_method='fir', 
-                                    fir_method='kaiser', gpass=1, gstop=80, 
+                                    N_desired=None, resample_method='interp1d',
+                                    stret_method='lowpass', lp_method='fir', 
+                                    fir_method='kaiser', trans_width=50, gpass=1, gstop=80, 
+                                    correct_by_gd=True, gd_padding='periodic',
                                     plot_filter=False, plot_signals=False,
                                     normalize=True)
 
-plt.plot(audio)
-plt.plot(restored_signal)
+print(len(audio))
+print(len(dwns_signal))
+print(len(restored_signal))
+
+plt.plot(np.linspace(0, len(audio), len(audio)), audio)
+plt.plot(np.linspace(0, len(audio), len(restored_signal)), restored_signal)
 plt.show()'''

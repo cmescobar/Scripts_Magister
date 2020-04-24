@@ -322,7 +322,7 @@ def create_artificial_heart_sounds(filepath, N_periods, choose=1, seed=0,
                                    save_wav=True, normalize_res=False, 
                                    normalize_out=True):
     ''' Función que permite generar un archivo de audio de sonidos cardíacos y su plot 
-    correspondientemente etiquetado (en base a los sonidos utilizados, ).
+    correspondientemente etiquetado.
     
     Parameters
     ----------
@@ -638,7 +638,8 @@ def get_heart_sounds_by_name(name, filepath, N_periods=30, seed=0,
         print('Completed!\n')
 
 
-def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, seed=0):
+def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp=1, 
+                                 a_noise=0, seed=0):
     '''Rutina que permite crear los sonidos cardíacos + respiratorios en una carpeta, tomando como
     base los archivos disponibles en "dir_to_heart" y "db_respiratory/Original".
     
@@ -646,6 +647,10 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
     ----------
     dir_to_heart : str
         Dirección de los sonidos cardíacos a utilizar
+    db_option : {'SS', 'HS'}, optional
+        Opción para la creación de la base de datos. 'SS' crea una base para separación
+        de fuentes, y 'HS' crea una base de datos para segmentación de sonidos cardiacos.
+        Por defecto es 'SS'.
     a_heart : float, optional
         Ponderación del sonido cardíaco en la mezcla. Por defecto es 1.
     a_resp : float, optional
@@ -657,15 +662,6 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
     '''
     # Plantando esta semilla para la generación de valores aleatorios del ruido blanco
     np.random.seed(seed)
-       
-    # Definición del directorio donde se guardará
-    folder_save = f'Database_manufacturing/db_HR/'\
-                  f'Seed-{seed} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
-    
-    # Preguntar si es que la carpeta que almacenará los sonidos se ha
-    # creado. En caso de que no exista, se crea una carpeta
-    if not os.path.isdir(folder_save):
-        os.makedirs(folder_save)
     
     # Definición del directorio a revisar para sonidos respiratorios
     dir_to_resp = 'Database_manufacturing/db_respiratory/Original'
@@ -677,9 +673,27 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
     
     # Lista de sonidos respiratorios
     resp_sounds = [i for i in os.listdir(dir_to_resp) if i.endswith('.wav')] 
+    
+    if db_option == 'SS':
+        # Definición del directorio donde se guardará
+        folder_save = f'Database_manufacturing/db_HR/Source Separation/'\
+                    f'Seed-{seed} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+        
+        # Definición de las posibles combinaciones entre sonidos
+        combinations = tuple(zip(resp_sounds, heart_sounds))
+    
+    elif db_option == 'HS':
+        # Definición del directorio donde se guardará
+        folder_save = f'Database_manufacturing/db_HR/Heart Segmentation/'\
+                    f'Seed-{seed} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+        
+        # Definición de las posibles combinaciones entre sonidos
+        combinations = tuple(product(resp_sounds, heart_sounds))
 
-    # Definición de las posibles combinaciones entre sonidos
-    combinations = tuple(product(resp_sounds, heart_sounds))
+    # Preguntar si es que la carpeta que almacenará los sonidos se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(folder_save):
+        os.makedirs(folder_save)
     
     for comb in tqdm(combinations, desc='Sounds', ncols=70):
         #print(f'Recording {comb[0]} + {comb[1]} sound...')
@@ -720,11 +734,14 @@ def get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=1, a_noise=0, s
         # Y grabando el sonido modificado del sonido respiratorio
         sf.write(f'{dir_to_resp_adapted}/{comb[0]}', resp_to_sum, samplerate=44100)
 
+
+
 # Módulo de testeo
 
 # Opciones de panel
 dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
-get_heart_respiratory_sounds(dir_to_heart, a_heart=1, a_resp=3, a_noise=0, seed=0)
+get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp=1, 
+                             a_noise=0, seed=0)
 
 '''
 filepath = 'Database_manufacturing/db_heart'

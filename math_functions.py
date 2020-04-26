@@ -178,3 +178,52 @@ def raised_cosine_modified(N, beta):
             rc_out = np.concatenate((rc_out, [0]))
             
     return rc_out
+
+
+def raised_cosine_fading(N, beta, side='right'):
+    ''' Creacion de una ventana de desvanecimiento basada en coseno elevado.
+    
+    Parameters
+    ----------
+    N : int
+        Cantidad de puntos de la ventana.
+    beta : float
+        Parámetro de la función coseno elevado para la apertura de la ventana.
+    side : {'left', 'right'}, optional
+        Dirección en la cual se puede usará la ventana. Se recomienda 'right' para
+        el final de la señal y 'left' para el comienzo. Por defecto es 'right'.
+    
+    Returns
+    -------
+    vanish_window : ndarray
+        Ventana de desvanecimiento de N puntos.
+    '''    
+    # Definición de la frecuencia f
+    f = np.linspace(-1, 1, 2*N)
+    
+    # Control de parámetro para beta
+    if beta <= 0:
+        beta = 0
+    elif beta >= 1:
+        beta = 1
+    
+    # Definición del vector de salida
+    rc_out = np.array([])
+    
+    # Para punto f
+    for i in f:
+        if abs(i) <= (1 - beta)/2:
+            rc_out = np.concatenate((rc_out, [1]))
+        elif (1 - beta)/2 < abs(i) <= (1 + beta)/2:
+            to_append =  1/2 * (1 + np.cos(np.pi / beta * (abs(i) - (1 - beta)/2)))
+            rc_out = np.concatenate((rc_out, [to_append]))
+        else:
+            rc_out = np.concatenate((rc_out, [0]))
+    
+    # Selección del lado
+    if side == 'right':
+        vanish_window = rc_out[N:]
+    elif side == 'left':
+        vanish_window = 1 - rc_out[N:]
+    
+    return vanish_window

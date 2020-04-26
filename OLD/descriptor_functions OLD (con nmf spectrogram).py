@@ -236,6 +236,95 @@ def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
     return np.divide(inv_spect, sum_wind2 + 1e-15)
 
 
+def nmf_to_spectrogram(audio, samplerate, N=4096, overlap=0.75, padding=0, 
+                       window='hamming', wiener_filt=True, alpha_wie=1,
+                       n_components=2, init='random', solver='mu', beta=2,
+                       tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                       random_state=100, W_0=None, H_0=None, whole=False,
+                       return_type='only_audio_comps'):
+    '''Función que a partir del archivo de audio (ingresado en la variable 
+    "audio") transforma los datos en un espectrograma con traslape dado por 
+    la variable "overlap" (0 para no tener traslape y 0.99 para 99% de 
+    traslape) y una cantidad de "padding" puntos.
+
+    Esta transformación además usa ventanas definidas por la variable "window", 
+    que puede variar entre "tukey", "hamming", "hann", "nuttall" y sin ventana 
+    (None).
+    
+    Además utiliza todos los parámetros relevantes para este estudio del comando
+    NMF programado en la librería sklearn, disponible en:
+    https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.NMF.html
+    
+    Finalmente, presenta la opción de aplicar un filtro de Wiener al resultado 
+    de las matrices obtenidas mediante NMF, utilizando la variable booleana 
+    "wiener_filt", y calibrando el valor de alpha propio de la máscara mediante 
+    la variable "alpha_wie".'''
+    
+    # Propiedad del overlap
+    overlap = 0.99 if overlap >= 0.99 else overlap
+    
+    # Definición de una lista que almacene las componentes
+    components = []
+    # Listas de valores de interés
+    Y_list = []
+    
+    # Obteniendo el espectrograma
+    t, f, S = get_spectrogram(audio, samplerate, N=N, padding=padding, 
+                              overlap=overlap, window=window, whole=whole)
+    
+    # Definiendo la magnitud del espectrograma (elemento a estimar)
+    X = np.abs(S)
+    
+    # Definiendo el modelo de NMF
+    model = NMF(n_components=n_components, init=init, solver=solver,
+                beta_loss=beta, tol=tol, max_iter=max_iter, 
+                random_state=random_state, alpha=alpha_nmf, l1_ratio=l1_ratio)
+    
+    # Ajustando
+    if init == 'random':
+        W = model.fit_transform(X)
+    else:
+        W = model.fit_transform(X, W=W_0, H=H_0)
+        
+    H = model.components_
+    
+    # Se define la función de transformación para Yi
+    if wiener_filt:
+        # Se aplica filtro de Wiener
+        filt = lambda source_i: wiener_filter(X, source_i, W, H, 
+                                              alpha=alpha_wie)
+    else:
+        # Solo se entrega la multiplicación W_i * H_i
+        filt = lambda source_i: source_i
+    
+    # Obteniendo las fuentes
+    for i in range(n_components):
+        source_i = np.outer(W[:,i], H[i])
+        
+        # Aplicando el filtro
+        Yi = filt(source_i) * np.exp(1j * np.angle(S))
+        
+        # Y posteriormente la transformada inversa
+        yi = get_inverse_spectrogram(Yi, overlap=overlap, window=window, 
+                                     whole=whole)
+        
+        # Agregando a la lista de componentes
+        components.append(np.real(yi))
+        Y_list.append(Yi)
+        
+    if return_type == 'only_audio_comps':
+        return np.array(components)
+    elif return_type == 'with_spect_comps':
+        return np.array(components)
+    elif return_type == 'only_factors':
+        return X, W, H
+    elif return_type == 'all':
+        return np.array(components), t, f, X, np.array(Y_list,dtype=np.complex64), W, H
+    else:
+        raise('Opción de retorno inválida. Utilice "only_audio_comps" o ' 
+              '"with_spect_comps" o "only_factors" o "all"')
+
+
 def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0, 
                                overlap=0.75, window='hann', n_components=2,
                                alpha_wiener=1):

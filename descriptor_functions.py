@@ -104,58 +104,90 @@ def abs_fourier_db_half(audio, samplerate, N_rep):
     return frec[:len(audio) // 2], fourier[:len(audio)//2] 
 
 
-def get_spectrogram(audio, samplerate, N=512, padding=0, overlap=0, 
+def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0, 
                     window='tukey', whole=False):
+    # Corroboración de criterios: noverlap <= N - 1
+    if N <= noverlap:
+        raise Exception('noverlap debe ser menor que N.')
+    elif noverlap < 0:
+        raise Exception('noverlap no puede ser negativo')
+    else:
+        noverlap = int(noverlap)
+    
     # Lista donde se almacenará los valores del espectrograma
-    spect = []
+    to_fft = []
     # Lista de tiempo
     times = []
     
     # Variables auxiliares
     t = 0   # Tiempo
     
-    # Seleccionar ventana
+    # Definición del paso de avance
+    step = N - noverlap
+    
+    # Si el norverlap es 0, se hacen ventanas 2 muestras más grandes 
+    # para no considerar los bordes izquierdo y derecho (que son 0)
+    if noverlap == 0:
+        N_window = N + 2
+    else:
+        N_window = N
+    
+    # Seleccionar ventana.
     if window == 'tukey':
-        wind_mask = tukey(N)
+        wind_mask = tukey(N_window)
     elif window == 'hamming':
-        wind_mask = hamming_window(N)
+        wind_mask = hamming_window(N_window)
     elif window == 'hann':
-        wind_mask = hann_window(N)
+        wind_mask = hann_window(N_window)
     elif window == 'nuttall':
-        wind_mask = nuttall(N)
+        wind_mask = nuttall(N_window)
     elif window is None:
-        wind_mask = np.array([1] * N)
+        wind_mask = np.array([1] * N_window)
+    
+    # Y se recorta en caso de noverlap cero
+    wind_mask = wind_mask[1:-1] if noverlap == 0 else wind_mask
+    
+    # Definición de bordes de signal_in
+    signal_in = np.concatenate((np.zeros(N//2), signal_in, np.zeros(N//2)))
     
     # Iteración sobre el audio
-    while audio.any():
+    while signal_in.size != 0:
         # Se corta la cantidad de muestras que se necesite, o bien, las que se
         # puedan cortar
-        if len(audio) >= N:
-            q_samples = N
-            step = int(N * (1 - overlap))
-        else:
-            break
-            # q_samples = step = len(audio)
+        if len(signal_in) >= N:
+            # Se obtienen las N muestras de interés
+            signal_frame = signal_in[:N]
             
-        # Recorte en la cantidad de muestras
-        audio_frame = audio[:q_samples]
-        audio = audio[step:]
-               
-        # Ventaneando
-        audio_frame_wind = audio_frame * wind_mask
-        
-        # Aplicando padding
-        audio_padded = np.append(audio_frame_wind, [0] * padding)
-        
-        # Aplicando transformada de fourier
-        audio_fft = np.fft.fft(audio_padded)
-               
+            # Y se corta la señal para la siguiente iteración
+            signal_in = signal_in[step:]
+            
+        # En la última iteración se añaden ceros para lograr el largo N
+        else:
+            # Definición del último frame
+            last_frame = signal_in[:]
+            
+            # Se rellena con ceros hasta lograr el largo            
+            signal_frame = np.append(last_frame, [0] * (N - len(last_frame)))
+            
+            # Y se corta la señal para la siguiente iteración
+            signal_in = signal_in[:0]
+    
         # Agregando a los vectores del espectro
-        spect.append(audio_fft)
+        to_fft.append(signal_frame)
         
         # Agregando al vector de tiempo
         times.append(t)
         t += step/samplerate
+    
+    # Ventaneando
+    signal_wind = np.array(to_fft) * wind_mask
+
+    # Aplicando padding
+    zeros = np.zeros((signal_wind.shape[0], padding), dtype=signal_wind.dtype)    
+    signal_padded = np.concatenate((signal_wind, zeros), axis=1)
+
+    # Aplicando transformada de fourier
+    spect = np.fft.fft(signal_padded)
     
     # Preguntar si se quiere el espectro completo, o solo la mitad (debido a
     # que está reflejado hermitianamente)
@@ -164,20 +196,23 @@ def get_spectrogram(audio, samplerate, N=512, padding=0, overlap=0,
         freqs = np.linspace(0, samplerate, N+padding)
 
         # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
-        spect = np.array(spect, dtype=np.complex64)
+        spect = np.array(spect, dtype=np.complex128)
     else:
         # Generar el vector de frecuencias para cada ventana
         freqs = np.linspace(0, samplerate//2, (N+padding)//2 + 1)
 
         # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
-        spect = np.array(spect, dtype=np.complex64)[:, :(N+padding)//2 + 1]
+        spect = np.array(spect, dtype=np.complex128)[:, :(N+padding)//2 + 1]
+
+    # Escalando
+    spect *= np.sqrt(1 / (N * np.sum(wind_mask ** 2)))
     
     # Se retornan los valores que permiten construir el espectrograma 
     # correspondiente
     return times, freqs, spect.T
 
 
-def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
+def get_inverse_spectrogram(X, N=None, noverlap=0, window='tukey', whole=False):
     # Preguntar si es que la señal está en el rango 0-samplerate. En caso de 
     # que no sea así, se debe concatenar el conjugado de la señal para 
     # recuperar el espectro. Esto se hace así debido a la propiedad de las 
@@ -187,36 +222,63 @@ def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
     # debiera ser la misma pero conjugada, para que al transformar esta señal 
     # hermitiana mediante la IFT, se recupere una señal real (correspondiente a 
     # la señal de audio).
+    
     if not whole:
         # Se refleja lo existente utilizando el conjugado
         X = np.concatenate((X, np.flip(np.conj(X[1:-1, :]), axis=0)))
-        
+            
     # Obtener la dimensión de la matriz
     rows, cols = X.shape
+        
+    # Corroboración de criterios: noverlap <= N - 1
+    if rows <= noverlap:
+        raise Exception('noverlap debe ser menor que la dimensión fila.')
+    else:
+        noverlap = int(noverlap)
+    
+    # Definición de N dependiendo de la naturaleza de la situación
+    if N is None or N > rows:
+        N = rows
+    
+    # Si el norverlap es 0, se hacen ventanas 2 muestras más grandes 
+    # para no considerar los bordes izquierdo y derecho (que son 0)
+    if noverlap == 0:
+        N_window = N + 2
+    else:
+        N_window = N
     
     # Seleccionar ventana
     if window == 'tukey':
-        wind_mask = tukey(rows)
+        wind_mask = tukey(N_window)
     elif window == 'hamming':
-        wind_mask = hamming_window(rows)
+        wind_mask = hamming_window(N_window)
     elif window == 'hann':
-        wind_mask = hann_window(rows)
+        wind_mask = hann_window(N_window)
     elif window == 'nuttall':
-        wind_mask = nuttall(rows)
+        wind_mask = nuttall(N_window)
     elif window is None:
-        wind_mask = np.array([1] * rows)
+        wind_mask = np.array([1] * N_window)
         
+    # Y se recorta en caso de noverlap cero
+    wind_mask = wind_mask[1:-1] if noverlap == 0 else wind_mask
+    
+    # Destransformando y re escalando se obtiene
+    ifft_scaled = np.fft.ifft(X, axis=0) * np.sqrt(N * np.sum(wind_mask ** 2))
+    
+    # Si N es menor que la dimensión de filas, significa que está padeada
+    ifft_scaled = ifft_scaled[:N,:] 
+    
     # A partir del overlap, el tamaño de cada ventana de la fft (dimensión fila)
     # y la cantidad de frames a las que se les aplicó la transformación 
     # (dimensión columna), se define la cantidad de muestras que representa la
     # señal original
-    step = int(rows * (1 - overlap))      # Tamaño del paso
-    total_samples = step * cols + rows    # Tamaño total del arreglo
+    step = N - noverlap                     # Tamaño del paso
+    total_samples = step * (cols - 1) + N   # Tamaño total del arreglo
     
     # Definición de una lista en la que se almacena la transformada inversa
-    inv_spect = np.zeros((total_samples,), dtype=np.complex128)
+    inv_spect = np.zeros(total_samples, dtype=np.complex128)
     # Definición de una lista de suma de ventanas cuadráticas en el tiempo
-    sum_wind2 = np.zeros((total_samples,), dtype=np.complex128)
+    sum_wind = np.zeros(total_samples, dtype=np.complex128)
     
     # Transformando columna a columna (nótese la división en tiempo por una 
     # ventana definida)
@@ -224,16 +286,21 @@ def get_inverse_spectrogram(X, overlap=0, window='tukey', whole=False):
         beg = i * step
         # Se multiplica por el kernel para la reconstrucción a partir de la
         # ventana aplicada inicialmente. Fuente:
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.istft.html
-        inv_spect[beg:beg+rows] += np.fft.ifft(X[:, i]) * wind_mask
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.istft.html        
+        # Agregando al arreglo
+        inv_spect[beg:beg+N] += ifft_scaled[:, i]
         
-        # Se suma la ventana al cuadrado (que sirve como ponderador)
-        sum_wind2[beg:beg+rows] += wind_mask ** 2
+        # Se suma la ventana (que sirve como ponderador)
+        sum_wind[beg:beg+N] += wind_mask
+    
+    # Se corta el padding agregado
+    inv_spect = inv_spect[N//2:-N//2]
+    sum_wind = sum_wind[N//2:-N//2]
     
     # Finalmente se aplica la normalización por la cantidad de veces que se
     # suma cada muestra en el proceso anterior producto del traslape,
     # utilizando las ventanas correspondientes
-    return np.divide(inv_spect, sum_wind2 + 1e-15)
+    return np.real(np.divide(inv_spect, np.where(sum_wind > 1e-10, sum_wind, 1)))
 
 
 def nmf_applied_frame_to_frame(audio, samplerate, N=4096, padding=0, 

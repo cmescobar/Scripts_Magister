@@ -88,7 +88,8 @@ def fade_connect_signals(signal_list, N, beta=1):
     
     return signal_faded
 
-    
+
+# Test module
 '''import soundfile as sf
 import matplotlib.pyplot as plt
 filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'

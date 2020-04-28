@@ -5,17 +5,18 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from ast import literal_eval
 from sklearn.decomposition import NMF
+from matplotlib.widgets import Button
 from fading_functions import fade_connect_signals
 from filter_and_sampling import resampling_by_points
 from math_functions import wiener_filter, raised_cosine_fading
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 
 
-def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.75, 
+def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=1024, 
                       padding=0, window='hamming', whole=False, alpha_wiener=1,  
                       wiener_filt=True, init='random', solver='cd', beta=2,
                       tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
-                      random_state=None, W_0=None, H_0=None):
+                      random_state=None, W_0=None, H_0=None, same_outshape=True):
     '''Función que permite separar una señal utilizando la descomposición NMF,
     la cual usa como entrada al sistema el espectrograma de la señal de audio.
     Además utiliza todos los parámetros relevantes para este estudio del comando
@@ -31,9 +32,9 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
         Cantidad de componentes a separar la señal. Por defecto es 2.
     N : int, optional
         Cantidad de puntos utilizados en cada ventana de la STFT. Por defecto es 2048.
-    overlap : float, optional
-        Nivel de traslape que existe entre una ventana y la siguiente al calcular la 
-        STFT. Por defecto es 0.75 (75%).
+    noverlap : float, optional
+        Cantidad de puntos de traslape que existe entre una ventana y la siguiente al 
+        calcular la STFT. Por defecto es 1024
     padding : int, optional
         Cantidad de ceros añadidos al final para aplicar zero padding. Por defecto es 0.
     window : {None, 'hamming', 'hann', 'nutall', 'tukey'}, optional
@@ -72,6 +73,9 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
         Punto de inicio para W. Por defecto es None.
     H_0 : None or ndarray, optional
         Punto de inicio para H. Por defecto es None.
+    same_outshape : bool, optional
+        'True' para que la salida tenga el mismo largo que la entrada. 'False' entrega el
+        largo de la señal obtenido después de la STFT. Por defecto es "True".
     
     Returns
     -------
@@ -92,7 +96,8 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
     [2] https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.NMF.html
     '''
     # Propiedad del overlap
-    overlap = 0.99 if overlap >= 0.99 else overlap
+    noverlap = 0 if noverlap <= 0 else noverlap
+    noverlap = noverlap if noverlap < N else N - 1
     
     # Definición de una lista que almacene las componentes
     components = []
@@ -101,7 +106,7 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
     
     # Obteniendo el espectrograma
     _, _, S = get_spectrogram(signal_in, samplerate, N=N, padding=padding, 
-                              overlap=overlap, window=window, whole=whole)
+                              noverlap=noverlap, window=window, whole=whole)
     
     # Definiendo la magnitud del espectrograma (elemento a estimar)
     X = np.abs(S)
@@ -138,9 +143,12 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
         Yi = filt(source_i) * np.exp(1j * np.angle(S))
         
         # Y posteriormente la transformada inversa
-        yi = get_inverse_spectrogram(Yi, overlap=overlap, window=window, 
+        yi = get_inverse_spectrogram(Yi, N=N, noverlap=noverlap, window=window, 
                                      whole=whole)
-                
+        
+        if same_outshape:
+            yi = yi[:len(signal_in)]
+        
         # Agregando a la lista de componentes
         components.append(np.real(yi))
         Y_list.append(Yi)
@@ -148,7 +156,7 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, overlap=0.7
     return components, Y_list, X, W, H
 
 
-def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, overlap=0.75,
+def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, noverlap=1024,
                       padding=0, window='hamming', whole=False, alpha_wiener=1,
                       wiener_filt=True):
     '''Función que permite separar una señal utilizando la descomposición NMF,
@@ -164,9 +172,9 @@ def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, overlap=0
         Cantidad de componentes a separar la señal. Por defecto es 2.
     N : int, optional
         Cantidad de puntos utilizados en cada ventana de la STFT. Por defecto es 2048.
-    overlap : float, optional
-        Nivel de traslape que existe entre una ventana y la siguiente al calcular la 
-        STFT. Por defecto es 0.75 (75%).
+    noverlap : float, optional
+        Cantidad de puntos de traslape que existe entre una ventana y la siguiente al 
+        calcular la STFT. Por defecto es 1024.
     padding : int, optional
         Cantidad de ceros añadidos al final para aplicar zero padding. Por defecto es 0.
     window : {None, 'hamming', 'hann', 'nutall', 'tukey'}, optional
@@ -205,7 +213,7 @@ def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, overlap=0
     
     # Obteniendo el espectrograma
     _, _, S = get_spectrogram(signal_in, samplerate, N=N, padding=padding, 
-                              overlap=overlap, window=window, whole=whole)
+                              noverlap=noverlap, window=window, whole=whole)
     
     # Definiendo la magnitud
     X = np.abs(S)
@@ -231,7 +239,7 @@ def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, overlap=0
         Yi = filt(source_i) * np.exp(1j * np.angle(S))
         
         # Y posteriormente la transformada inversa
-        yi = get_inverse_spectrogram(Yi, overlap=overlap, window=window, 
+        yi = get_inverse_spectrogram(Yi, N=N, noverlap=noverlap, window=window, 
                                      whole=whole)
         
         # Agregando a la lista de componentes
@@ -241,9 +249,15 @@ def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, overlap=0
     return components, Y_list, X, W, H
 
 
-def get_components_HR_sounds(filepath, sep_type='to all', n_components=2, N=2048, overlap=0.75, 
-                             window='hamming', whole=False, alpha_wiener=1, 
-                             wiener_filt=True, plot_segments=False):
+def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual',  
+                             n_components=2, N=2048, N_lax=1500, N_fade=500, 
+                             noverlap=1024, padding=0, window='hamming', whole=False, 
+                             alpha_wiener=1, wiener_filt=True, init='random', 
+                             solver='cd', beta=2, tol=1e-4, max_iter=200, 
+                             alpha_nmf=0, l1_ratio=0, random_state=0, 
+                             W_0=None, H_0=None, plot_segments=False):
+    '''Función que permite generar los archivos de componentes
+    '''
     # Lista de los archivos de la carpeta
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
     
@@ -255,7 +269,6 @@ def get_components_HR_sounds(filepath, sep_type='to all', n_components=2, N=2048
     else:
         raise Exception('Opción no válida para tipo de separación.')
     
-    
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
     if not os.path.isdir(filepath_to_save):
@@ -263,19 +276,23 @@ def get_components_HR_sounds(filepath, sep_type='to all', n_components=2, N=2048
     
     for audio_name in tqdm(filenames, desc='NMF decomp', ncols=70):
         # Dirección del archivo en la carpeta madre. Este archivo es el que se descompondrá
-        dir_to_dec = f"{filepath}/{audio_name}"
-        
+        dir_audio = f"{filepath}/{audio_name}"
+                
         if sep_type == 'to_all':            
             # Lectura del archivo
-            audio_file, samplerate = sf.read(dir_to_dec)
+            audio_file, samplerate = sf.read(dir_audio)
             
             # Aplicando la descomposición
             comps, _, _, _, _ = nmf_decomposition(audio_file, samplerate, 
-                                                n_components=n_components, N=N, 
-                                                overlap=overlap, #padding=padding, 
-                                                window=window, whole=whole, 
-                                                alpha_wiener=alpha_wiener,
-                                                wiener_filt=wiener_filt)
+                                                  n_components=n_components, 
+                                                  N=N, noverlap=noverlap, padding=padding,
+                                                  window=window, whole=whole, 
+                                                  alpha_wiener=alpha_wiener,
+                                                  wiener_filt=wiener_filt, init=init, 
+                                                  solver=solver, beta=beta, tol=tol, 
+                                                  max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                                  l1_ratio=l1_ratio, random_state=random_state,
+                                                  W_0=W_0, H_0=H_0)
             
             # Definiendo el nombre de los archivos
             name_to_save = f'{filepath_to_save}/{audio_name.strip(".wav")}'
@@ -285,20 +302,20 @@ def get_components_HR_sounds(filepath, sep_type='to all', n_components=2, N=2048
             sf.write(f'{name_to_save} Comp 2.wav', comps[1], samplerate)
             
         elif sep_type == 'on segments':
-            # Dirección del archivo en la carpeta madre. Este archivo es el que se descompondrá
-            dir_to_dec = f"{filepath}/{audio_name}"
-            
             resp_signal, heart_signal = \
-                nmf_applied_interest_segments(dir_to_dec, n_components=n_components, 
-                                                N=N, overlap=overlap,
-                                                window=window, whole=whole, 
-                                                alpha_wiener=alpha_wiener,
-                                                wiener_filt=wiener_filt,
-                                                plot_segments=plot_segments)
+                nmf_applied_interest_segments(dir_audio, assign_method=assign_method, 
+                                              n_components=n_components, N=N, 
+                                              N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+                                              padding=padding, window=window, whole=whole,
+                                              alpha_wiener=alpha_wiener, 
+                                              wiener_filt=wiener_filt, init=init, 
+                                              solver=solver, beta=beta, tol=tol, 
+                                              max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                              l1_ratio=l1_ratio, random_state=random_state, W_0=W_0, H_0=H_0, plot_segments=plot_segments)
 
 
 def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components=2, 
-                                  N=2048, N_lax=1500, N_fade=500, overlap=0.75,
+                                  N=2048, N_lax=1500, N_fade=500, noverlap=1024, padding=0,
                                   window='hamming', whole=False, alpha_wiener=1, 
                                   wiener_filt=True, init='random', solver='cd', beta=2,
                                   tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
@@ -325,9 +342,9 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
     N_fade : int, optional
         Cantidad de puntos utilizados para que la ventana se mezcle con fade. Por defecto
         es 500.
-    overlap : float, optional
-        Nivel de traslape que existe entre una ventana y la siguiente al calcular la 
-        STFT. Por defecto es 0.75 (75%).
+    noverlap : float, optional
+        Cantidad de puntos de traslape que existe entre una ventana y la siguiente al 
+        calcular la STFT. Por defecto es 1024.
     padding : int, optional
         Cantidad de ceros añadidos al final para aplicar zero padding. Por defecto es 0.
     window : {None, 'hamming', 'hann', 'nutall', 'tukey'}, optional
@@ -392,17 +409,19 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
     # Definición de la señal cardíaca de salida
     heart_signal = np.zeros(len(signal_in))
     
-    # Método de trabajo
-    if assign_method == 'auto':
-        # Se obtienen las componetes a partir de las etiquetas generadas
-        with open(f'{filepath_to_save}/Heart comp labels.txt', 'r', encoding='utf8') as data:
-            comps_choice = literal_eval(data.readline())['comps_choice']
+    # Definición del diccionario que contiene los parámetros de simulación
+    dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
+                       'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
+                       'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
+                       'wiener_filt': wiener_filt, 'init': init, 
+                       'solver': solver, 'beta': beta, 'tol': tol, 
+                       'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
+                       'l1_ratio': l1_ratio, 'random_state': random_state}
     
-    elif assign_method == 'manual':
-        # Si se usa el modo manual, se crea una lista que vaya guardando las etiquetas
-        heart_comp_labels = list()
-        # Y seleccionar modo plot por defecto
-        plot_segments = True
+    # Control de parámetros simulación (consultar repetir) y asignación de id's
+    dict_simulation, comps_choice, heart_comp_labels, plot_segments, assign_method =\
+        _manage_registerdata_segments_nmf(dict_simulation, assign_method, 
+                                      filepath_to_save, plot_segments)
     
     # Aplicando NMF en cada segmento de interés
     for num, interval in enumerate(interval_list, 1):
@@ -416,7 +435,7 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
         # Aplicando NMF 
         comps, _, _, W, H = nmf_decomposition(segment, samplerate, 
                                               n_components=n_components, 
-                                              N=N, overlap=overlap, padding=0,
+                                              N=N, noverlap=noverlap, padding=padding,
                                               window=window, whole=whole, 
                                               alpha_wiener=alpha_wiener,
                                               wiener_filt=wiener_filt, init=init, 
@@ -424,49 +443,20 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
                                               max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                               l1_ratio=l1_ratio, random_state=random_state,
                                               W_0=W_0, H_0=H_0)
+    
+        # Definición de guardado para cada id
+        filepath_to_save_id = f'{filepath_to_save}/id {dict_simulation["id"]}'
+
+        # Preguntar si es que la carpeta que almacenará las imágenes se ha
+        # creado. En caso de que no exista, se crea una carpeta
+        if not os.path.isdir(filepath_to_save_id):
+            os.makedirs(filepath_to_save_id)
         
         # Graficos
         if plot_segments:
-            # Definición del backend para maximizar la ventana. Dependiendo del SO
-            # puede variar. Para revisar usar comando matplotlib.get_backend()
-            plt.switch_backend('TkAgg')
-            
-            # Creación del plot
-            fig, ax = plt.subplots(1, 3, figsize=(17,7))
-            
-            # Plots
-            ax[0].plot(comps[0], label='Comp 1')
-            ax[0].plot(comps[1], label='Comp 2')
-            ax[0].plot(signal_in[lower-N_fade:upper+N_fade], label='Original')
-            ax[0].legend(loc='upper right')
-            ax[0].set_title('Señales')
-            
-            ax[1].plot(W[:,0], label='Comp 1')
-            ax[1].plot(W[:,1], label='Comp 2')
-            ax[1].legend(loc='upper right')
-            ax[1].set_xlim([0,100])
-            ax[1].set_title('Matriz W')
-            
-            ax[2].plot(H[0], label='Comp 1')
-            ax[2].plot(H[1], label='Comp 2')
-            ax[2].legend(loc='upper right')
-            ax[2].set_title('Matriz H')
-            
-            # Definición del título
-            fig.suptitle(f'Segment #{num}')
-            
-            # Se guarda la figura
-            fig.savefig(f'{filepath_to_save}/Segment {num}.png') 
-            
-            if assign_method == 'manual':
-                # Manager para modificar la figura actual y maximizarla
-                manager = plt.get_current_fig_manager()
-                manager.window.state('zoomed')
-                # Se muestra el gráfico
-                plt.show()
-            
-            # Se cierra la figura
-            plt.close()
+            decision_in_plot = _plot_segments_nmf(signal_in, comps, W, H, N_fade, 
+                                                  lower, upper, num, filepath_to_save_id, 
+                                                  assign_method)
             
         if assign_method == 'auto':
             # Se obtiene la decisión etiquetada como sonido cardíaco
@@ -474,7 +464,7 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
         
         elif assign_method == 'manual':
             # Se pregunta para la decisión del sonido cardíaco
-            heart_decision = decision_question_in_comps(n_components)
+            heart_decision = decision_in_plot
             
             # Se agrega la decisión a la lista de labels
             heart_comp_labels.append(heart_decision)
@@ -497,19 +487,16 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
     if assign_method == 'manual' and plot_segments:
         # Finalmente, se escribe las etiquetas de las componentes
         with open(f'{filepath_to_save}/Heart comp labels.txt', 'a', encoding='utf8') as data:
-            # Definición del diccionario de información a guardar
-            dic_to_save = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
-                           'N_fade': N_fade, 'overlap': overlap, 'padding': 0,
-                           'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
-                           'wiener_filt': wiener_filt, 'init': init, 
-                           'solver': solver, 'beta': beta, 'tol': tol, 
-                           'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
-                           'l1_ratio': l1_ratio, 'random_state': random_state,
-                           'heart_comp_labels': heart_comp_labels}
+            # Se agrega la información de las etiquetas generadas
+            dict_simulation['heart_comp_labels'] = heart_comp_labels
             
-            # Guardando
-            data.write(str(dic_to_save))
+            # Y se guarda
+            data.write(f'{dict_simulation}\n')
 
+    # Finalmente, grabando los archivos de audio
+    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, 44100)
+    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, 44100)
+    
     return resp_signal, heart_signal
 
 
@@ -640,7 +627,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             plt.close()
 
 
-def decision_question_in_comps(n_components):
+def _decision_question_in_comps(n_components):
     '''Función que plantea la pregunta que permite decidir la componente que corresponde al
     sonido cardíaco.
     
@@ -664,60 +651,225 @@ def decision_question_in_comps(n_components):
             break
         else:
             print('La componente seleccionada no existe. Por favor, intente nuevamente.\n')
-    print(decision)
+    
     return decision
 
+
+def _plot_segments_nmf(signal_in, comps, W, H, N_fade, lower, upper, 
+                       num, filepath_to_save, assign_method):
+    '''Función auxiliar que permite realizar los gráficos en la función
+    "nmf_applied_interest_segments".
+    '''
+    # Definición de la clase que usará el bóton para regular las funciones
+    class Boton_seleccion:
+        ''' Clase que permitirá controlar la variable de interés y los métodos
+        para los botones implementados
+        '''
+        def __init__(self):
+            self.value = None
+        
+        def componente_1(self, event):
+            self.value = 0
+            plt.close()
+        
+        def componente_2(self, event):
+            self.value = 1
+            plt.close()
+    
+    # Definición del backend para maximizar la ventana. Dependiendo del SO
+    # puede variar. Para revisar usar comando matplotlib.get_backend()
+    plt.switch_backend('TkAgg')
+    
+    # Creación del plot
+    fig, ax = plt.subplots(1, 3, figsize=(17,7))
+    
+    # Plots
+    ax[0].plot(comps[0], label='Comp 1')
+    ax[0].plot(comps[1], label='Comp 2')
+    ax[0].plot(signal_in[lower-N_fade:upper+N_fade], label='Original')
+    ax[0].legend(loc='upper right')
+    ax[0].set_title('Señales')
+    
+    ax[1].plot(W[:,0], label='Comp 1')
+    ax[1].plot(W[:,1], label='Comp 2')
+    ax[1].legend(loc='upper right')
+    ax[1].set_xlim([0,100])
+    ax[1].set_title('Matriz W')
+    
+    ax[2].plot(H[0], label='Comp 1')
+    ax[2].plot(H[1], label='Comp 2')
+    ax[2].legend(loc='upper right')
+    ax[2].set_title('Matriz H')
+    
+    # Definición del título
+    fig.suptitle(f'Segment #{num}')
+    
+    # Se guarda la figura
+    fig.savefig(f'{filepath_to_save}/Segment {num}.png') 
+    
+    if assign_method == 'manual':
+        # Manager para modificar la figura actual y maximizarla
+        manager = plt.get_current_fig_manager()
+        manager.window.state('zoomed')
+        
+        # Re ajuste del plot
+        plt.subplots_adjust(bottom=0.15)
+        
+        # Definición de la clase que se utilizará para el callback
+        callback_seleccion = Boton_seleccion()
+        
+        # Dimensión y ubicación de los botones
+        ax_comp1 = plt.axes([0.7, 0.05, 0.1, 0.05])
+        ax_comp2 = plt.axes([0.81, 0.05, 0.1, 0.05])
+        
+        # Definición de los botones
+        bcomp1 = Button(ax_comp1, 'Componente 1', color='C0')
+        bcomp2 = Button(ax_comp2, 'Componente 2', color='C1')
+        
+        # Y se conecta cada uno a una función en la clase definida arriba
+        bcomp1.on_clicked(callback_seleccion.componente_1)
+        bcomp2.on_clicked(callback_seleccion.componente_2)
+        
+        # Se muestra el gráfico
+        plt.show()
+        
+        # Definición del valor a retornar
+        to_return = callback_seleccion.value
+        
+        if to_return is None:
+            print('Seleccione una opción...')
+            return _plot_segments_nmf(signal_in, comps, W, H, N_fade, lower, upper, 
+                                      num, filepath_to_save, assign_method)
+        else:
+            return to_return 
+    
+    # Se cierra la figura
+    plt.close()
+
+
+def _manage_registerdata_segments_nmf(dict_simulation, assign_method, 
+                                      filepath_to_save, plot_segments):
+    '''Rutina que permite realizar la gestión del registro de las simulaciones 
+    realizadas. Se realiza el guardado los datos, corroboración de simulaciones
+    ya existentes (preguntando si es que se quieren realizar nuevamente) y 
+    creación de etiquetas para la señal simulada.
+    
+    Se asigna una etiqueta a cada señal nueva contando la cantidad de líneas 
+    utilizadas anteriormente. Es decir, el id corresponde al número de la línea
+    en el archivo
+    '''
+    # Definición previa de la selección de variables
+    comps_choice = None
+    heart_comp_labels = None
+    
+    # Definición del contador de líneas (que servirá como id de cada simulación)
+    id_count = 1
+    
+    # Se intenta porque puede ser que el archivo no esté creado
+    try:
+        # Se obtienen las componetes a partir de las etiquetas generadas
+        with open(f'{filepath_to_save}/Heart comp labels.txt', 'r', encoding='utf8') as data:
+            for line in data:
+                # Obtención del diccionario con el contexto
+                dict_line = literal_eval(line.strip())
+                
+                # Se obtienen los componentes tentativos
+                possible_comps = dict_line['heart_comp_labels']
+                possible_id = dict_line['id']
+                
+                # Y se eliminan los labels para luego realizar una comparación
+                del dict_line['heart_comp_labels']
+                del dict_line['id']
+                
+                # Y se comparan los parámetros utilizados
+                if dict_simulation == dict_line:
+                    # Si son iguales, se asigna la variable
+                    comps_choice = possible_comps
+                    
+                    # Y se agregan los valores al diccionario de la simulación
+                    dict_id = {'id': possible_id}
+                    
+                    #Concatenando
+                    dict_id.update(dict_simulation)
+                    dict_simulation = dict_id
+                    dict_simulation['heart_comp_labels'] = possible_comps
+                    break
+                
+                # Se aumenta el contador por cada línea leída
+                id_count += 1
+    
+    # En caso de que no exista
+    except:
+        # Definitivamente debe ingresarse manualmente
+        print('Advertencia (!): Debido a que es la primera vez que se crea el archivo, '
+              'el método debe ser manual (assign_method == "manual").\n')
+        assign_method = 'manual'
+    
+    # Método de trabajo
+    if assign_method == 'auto':
+        if comps_choice is None:
+            raise Exception('No existe una base de etiquetas para el archivo dado estos '
+                            'parámetros, por lo que la asignación automática no puede '
+                            'ser realizada (assign_method == "auto")\n')
+    
+    elif assign_method == 'manual':
+        if comps_choice is None:
+            # Si se usa el modo manual, se crea una lista que vaya guardando las etiquetas
+            heart_comp_labels = list()
+            # Y seleccionar modo plot por defecto
+            plot_segments = True
+            
+            # Se agrega la id definida al diccionario de simulación
+            dict_id = {'id': id_count}
+            
+            #Concatenando
+            dict_id.update(dict_simulation)
+            dict_simulation = dict_id
+            
+        else:
+            while True:
+                # Preguntar si es que se quiere hacer la simulación de nuevo en caso de que 
+                # ya exista
+                continue_decision = input('La simulación que quieres hacer ya fue realizada '
+                                          f'(en id: {dict_simulation["id"]}), '
+                                          '¿deseas hacerla nuevamente? [y/n]: ')
+                
+                if continue_decision == 'y':
+                    # Si se usa el modo manual, se crea una lista que vaya guardando las etiquetas
+                    heart_comp_labels = list()
+                    # Y seleccionar modo plot por defecto
+                    plot_segments = True
+                    break
+                
+                elif continue_decision == 'n':
+                    print('Función terminada.\n')
+                    exit()
+                    
+                print('Opción no válida.\n')
+    
+    return dict_simulation, comps_choice, heart_comp_labels, plot_segments, assign_method
 
 
 # Module testing
 filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - 1_Heart 1_Resp 0_White noise'
-comparison_components_nmf_ground_truth(filepath, plot_signals=True, plot_show=True)
+
+get_components_HR_sounds(filepath, sep_type='on segments', assign_method='manual',  
+                        n_components=2, N=2048, N_lax=1500, N_fade=500, 
+                        noverlap=1024, padding=0, window='hamming', whole=False, 
+                        alpha_wiener=1, wiener_filt=True, init='random', 
+                        solver='cd', beta=2, tol=1e-4, max_iter=200, 
+                        alpha_nmf=0, l1_ratio=0, random_state=0, 
+                        W_0=None, H_0=None, plot_segments=False)
 
 '''
-dir_file = f'{filepath}/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60].wav'
-
-resp_signal, heart_signal =\
-    nmf_applied_interest_segments(dir_file, assign_method='manual', n_components=2, 
-                                  N=4096, N_lax=0, N_fade=1500, overlap=0.99,
-                                  window='hamming', whole=False, alpha_wiener=1, 
-                                  wiener_filt=True, init='random', solver='cd', beta=2,
-                                  tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
-                                  random_state=0, W_0=None, H_0=None, 
-                                  plot_segments=False)
-
-sf.write(f'{filepath}/Components/Separation on segments/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60]/Respiratory signal.wav', resp_signal, 44100)
-sf.write(f'{filepath}/Components/Separation on segments/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60]/Heart signal.wav', heart_signal, 44100)
+get_components_HR_sounds(filepath, sep_type='on segments', assign_method='manual',  
+                        n_components=2, N=2048, N_lax=1500, N_fade=500, 
+                        noverlap=1024, padding=0, window='hamming', whole=False, 
+                        alpha_wiener=1, wiener_filt=True, init='random', 
+                        solver='cd', beta=2, tol=1e-4, max_iter=200, 
+                        alpha_nmf=0, l1_ratio=0, random_state=0, 
+                        W_0=None, H_0=None, plot_segments=False)
 
 
-
-get_components_HR_sounds(filepath, sep_type='on segments', n_components=2, N=2048, overlap=0.75, 
-                             padding=0, window='hamming', whole=False, alpha=1, 
-                             wiener_filt=True, plot_segments=True)
-                           
-filename = 'NMF_design/159_1b1_Al_sc_Meditron'
-audio, samplerate = sf.read(f'{filename}.wav')
-
-comps, _, X, W, H = nmf_decomposition(audio, samplerate, n_components=2, N=4096, overlap=0.75,
-                                       padding=0, window='hamming', whole=False, 
-                                       alpha_wiener=1,
-                                       wiener_filt=True)
-comps_2, _, X, W, H = nmf_decomposition_2(audio, samplerate, n_components=2, N=4096, overlap=0.75,
-                                       padding=0, window='hamming', whole=False, 
-                                       alpha_wiener=1,
-                                       wiener_filt=True)
-
-
-plt.figure(figsize=(9,5))
-plt.subplot(2,1,1)
-plt.plot(comps[0], label='Comp 1')
-plt.plot(comps[1], label='Comp 2')
-plt.plot(comps_2[0], label='Comp 1.2')
-plt.plot(comps_2[1], label='Comp 2.2')
-plt.ylabel('Componentes')
-plt.legend(loc='upper right')
-
-plt.subplot(2,1,2)
-plt.plot(audio)
-plt.ylabel('Señal original')
-plt.show()
-#'''
+#comparison_components_nmf_ground_truth(filepath, plot_signals=True, plot_show=True)
+'''

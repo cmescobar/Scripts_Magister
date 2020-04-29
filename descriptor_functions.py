@@ -212,7 +212,7 @@ def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0,
     return times, freqs, spect.T
 
 
-def get_inverse_spectrogram(X, N=None, noverlap=0, window='tukey', whole=False):
+def get_inverse_spectrogram(X, N=0, noverlap=0, window='tukey', whole=False):
     # Preguntar si es que la señal está en el rango 0-samplerate. En caso de 
     # que no sea así, se debe concatenar el conjugado de la señal para 
     # recuperar el espectro. Esto se hace así debido a la propiedad de las 
@@ -237,7 +237,7 @@ def get_inverse_spectrogram(X, N=None, noverlap=0, window='tukey', whole=False):
         noverlap = int(noverlap)
     
     # Definición de N dependiendo de la naturaleza de la situación
-    if N is None or N > rows:
+    if N == 0 or N > rows:
         N = rows
     
     # Si el norverlap es 0, se hacen ventanas 2 muestras más grandes 

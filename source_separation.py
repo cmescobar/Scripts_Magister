@@ -9,6 +9,7 @@ from matplotlib.widgets import Button
 from fading_functions import fade_connect_signals
 from filter_and_sampling import resampling_by_points
 from math_functions import wiener_filter, raised_cosine_fading
+from math_functions import raised_cosine_modified as raicos_mod
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 
 
@@ -294,9 +295,8 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
                            'l1_ratio': l1_ratio, 'random_state': random_state}
         
         # Refresco del diccionario de simulación
-        dict_simulation, continue_dec = _manage_registerdata_all_nmf(dict_simulation, 
-                                                                    filepath_to_save)
-
+        dict_simulation, continue_dec, _ = _manage_registerdata_all_nmf(dict_simulation, 
+                                                                        filepath_to_save)
         # Seguir con la rutina
         if not continue_dec:
             return None
@@ -410,7 +410,7 @@ def nmf_applied_all(dir_file, filepath_to_save_id, n_components=2, N=2048, nover
 
 
 def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components=2, 
-                                  N=2048, N_lax=1500, N_fade=500, noverlap=1024, padding=0,
+                                  N=2048, N_lax=0, N_fade=500, noverlap=1024, padding=0,
                                   window='hamming', whole=False, alpha_wiener=1, 
                                   wiener_filt=True, init='random', solver='cd', beta=2,
                                   tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
@@ -590,11 +590,152 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
             data.write(f'{dict_simulation}\n')
 
     # Finalmente, grabando los archivos de audio
-    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, 44100)
-    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, 44100)
+    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, samplerate)
+    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, samplerate)
     
     return resp_signal, heart_signal
 
+
+def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2, 
+                                N=2048, N_lax=0, N_fade=500, noverlap=1024, padding=0,
+                                window='hamming', whole=False, alpha_wiener=1, 
+                                wiener_filt=True, init='random', solver='cd', beta=2,
+                                tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                                random_state=0, W_0=None, H_0=None, 
+                                plot_segments=False):
+    '''
+    '''
+    # Abriendo el archivo de sonido
+    signal_in, samplerate = sf.read(f'{dir_file}')
+    
+    # Definición de la carpeta donde se ubica
+    filepath = '/'.join(dir_file.split('/')[:-1])
+    
+    # Definición del nombre del archivo
+    filename = dir_file.strip('.wav').split('/')[-1]
+        
+    # Definición de la carpeta a guardar los segmentos
+    filepath_to_save = f'{filepath}/Components/Masking on segments'
+    
+    # Preguntar si es que la carpeta que almacenará las imágenes se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(filepath_to_save):
+        os.makedirs(filepath_to_save)
+    
+    # A partir del nombre del archivo es posible obtener también su lista de intervalos.
+    ## Primero se obtiene el nombre del sonido cardíaco a revisar
+    file_heart = filename.split(' ')[-1].strip('.wav')
+    
+    ## Luego se define la dirección del archivo de segmentos
+    segment_folder = f'Database_manufacturing/db_heart/Manual Combinations'
+    
+    try:
+        ## Y se retorna el archivo de segmentos correspondiente al nombre
+        name_file_segment = [i for i in os.listdir(segment_folder) 
+                             if i.endswith('.txt') and file_heart in i][0]
+        
+        ## Se abre el archivo y se obtiene la lista de intervalos
+        with open(f'{segment_folder}/{name_file_segment}', 'r', encoding='utf8') as data:
+            interval_list = literal_eval(data.readline())
+        
+    except:
+        raise Exception(f'No se logra encontrar el archivo con intervalos cardíacos de '
+                        f'{filename}')
+    
+    # Definición de la señal a descomponer mediante NMF
+    to_decompose = np.zeros(len(signal_in))
+    # Definición de la señal respiratoria de salida
+    resp_signal = np.copy(signal_in)
+    
+    # Definición del diccionario que contiene los parámetros de simulación
+    dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
+                       'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
+                       'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
+                       'wiener_filt': wiener_filt, 'init': init, 
+                       'solver': solver, 'beta': beta, 'tol': tol, 
+                       'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
+                       'l1_ratio': l1_ratio, 'random_state': random_state}
+    
+    # Control de parámetros simulación (consultar repetir) y asignación de id's
+    dict_simulation, continue_dec, to_save =  _manage_registerdata_all_nmf(dict_simulation, 
+                                                                           filepath_to_save,
+                                                                           masked_func=True)
+    
+    # Seguir con la rutina
+    if not continue_dec:
+        return None
+    
+    # Definición del filepath a guardar para la simulación
+    filepath_to_save_id = f'{filepath_to_save}/id {dict_simulation["id"]}'
+    
+    # Preguntar si es que la carpeta que almacenará las imágenes se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(filepath_to_save_id):
+        os.makedirs(filepath_to_save_id)
+    
+    # Transformando la señal 
+    for num, interval in enumerate(interval_list, 1):
+        # Definición del límite inferior y superior
+        lower = interval[0] - N_lax
+        upper = interval[1] + N_lax
+        
+        # Agregando los valores de la señal a descomponer
+        to_decompose[lower:upper] = signal_in[lower:upper]
+    
+    # Corrigiendo la señal respiratoria con lo que se había quitado
+    resp_signal -= to_decompose
+    
+    plt.plot(resp_signal)
+    plt.plot(to_decompose)
+    plt.show()
+    
+    # Aplicando NMF 
+    comps, _, _, W, H = nmf_decomposition(to_decompose, samplerate, 
+                                          n_components=n_components, 
+                                          N=N, noverlap=noverlap, padding=padding,
+                                          window=window, whole=whole, 
+                                          alpha_wiener=alpha_wiener,
+                                          wiener_filt=wiener_filt, init=init, 
+                                          solver=solver, beta=beta, tol=tol, 
+                                          max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                          l1_ratio=l1_ratio, random_state=random_state,
+                                          W_0=W_0, H_0=H_0)
+    
+    # Graficos
+    if plot_segments:
+        decision_in_plot = _plot_masked_nmf(signal_in, comps, W, H, num, 
+                                            filepath_to_save, assign_method)
+    
+    if assign_method == 'auto':
+        # Se obtiene la decisión etiquetada como sonido cardíaco
+        heart_decision = None
+        print('No implementado')
+        return
+        
+    elif assign_method == 'manual':
+        # Se pregunta para la decisión del sonido cardíaco
+        heart_decision = decision_in_plot
+    
+    # Y se complementa para el sonido respiratorio
+    resp_decision = 0 if heart_decision == 1 else 1
+    
+    # Reconstrucción de las señales
+    heart_signal = comps[heart_decision]
+    resp_signal += comps[resp_decision]
+    
+    # Se agrega la decisión al diccionario
+    dict_simulation['heart decision'] = heart_decision
+    
+    # Registro del archivo de la simulación
+    if to_save:
+        with open(f'{filepath_to_save}/Simulation register.txt', 'a', encoding='utf8') as data:
+            data.write(f'{dict_simulation}\n')
+    
+    # Finalmente, grabando los archivos de audio
+    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, samplerate)
+    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, samplerate)
+    
+    return resp_signal, heart_signal
 
 def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=False,
                                            plot_show=False, id_rev=1):
@@ -885,12 +1026,103 @@ def _plot_segments_nmf(signal_in, comps, W, H, N_fade, lower, upper,
                                       num, filepath_to_save, assign_method)
         else:
             return to_return 
+
+
+def _plot_masked_nmf(signal_in, comps, W, H, num, filepath_to_save, assign_method):
+    '''Función auxiliar que permite realizar los gráficos en la función
+    "nmf_applied_masked_segments".
+    '''
+    # Definición de la clase que usará el bóton para regular las funciones
+    class Boton_seleccion:
+        ''' Clase que permitirá controlar la variable de interés y los métodos
+        para los botones implementados.
+        
+        Aclaración: La correspondencia es la siguiente.
+        [None, 1, 2, 3, 'up', 'down']
+        {None, MouseButton.LEFT, MouseButton.MIDDLE, MouseButton.RIGHT, 'up', 'down'}
+        '''
+        def __init__(self):
+            self.value = None
+        
+        def componente_1(self, event):
+            if event.button == 1:
+                self.value = 0
+                plt.close()
+        
+        def componente_2(self, event):
+            if event.button == 1:
+                self.value = 1
+                plt.close()
     
-    # Se cierra la figura
-    plt.close()
+    # Definición del backend para maximizar la ventana. Dependiendo del SO
+    # puede variar. Para revisar usar comando matplotlib.get_backend()
+    plt.switch_backend('TkAgg')
+    
+    # Creación del plot
+    fig, ax = plt.subplots(1, 3, figsize=(17,7))
+    
+    # Plots
+    ax[0].plot(signal_in, label='Original', linewidth=3, color='C2')
+    ax[0].plot(comps[0], label='Comp 1', color='C0')
+    ax[0].plot(comps[1], label='Comp 2', color='C1')
+    ax[0].legend(loc='upper right')
+    ax[0].set_title('Señales')
+    
+    ax[1].plot(W[:,0], label='Comp 1')
+    ax[1].plot(W[:,1], label='Comp 2')
+    ax[1].legend(loc='upper right')
+    ax[1].set_xlim([0,100])
+    ax[1].set_title('Matriz W')
+    
+    ax[2].plot(H[0], label='Comp 1')
+    ax[2].plot(H[1], label='Comp 2')
+    ax[2].legend(loc='upper right')
+    ax[2].set_title('Matriz H')
+    
+    # Definición del título
+    fig.suptitle(f'Segment #{num}')
+    
+    # Se guarda la figura
+    fig.savefig(f'{filepath_to_save}/Segment {num}.png') 
+    
+    if assign_method == 'manual':
+        # Manager para modificar la figura actual y maximizarla
+        manager = plt.get_current_fig_manager()
+        manager.window.state('zoomed')
+        
+        # Re ajuste del plot
+        plt.subplots_adjust(bottom=0.15)
+        
+        # Definición de la clase que se utilizará para el callback
+        callback_seleccion = Boton_seleccion()
+        
+        # Dimensión y ubicación de los botones
+        ax_comp1 = plt.axes([0.7, 0.05, 0.1, 0.05])
+        ax_comp2 = plt.axes([0.81, 0.05, 0.1, 0.05])
+        
+        # Definición de los botones
+        bcomp1 = Button(ax_comp1, 'Componente 1', color='C0')
+        bcomp2 = Button(ax_comp2, 'Componente 2', color='C1')
+        
+        # Y se conecta cada uno a una función en la clase definida arriba
+        bcomp1.on_clicked(callback_seleccion.componente_1)
+        bcomp2.on_clicked(callback_seleccion.componente_2)
+        
+        # Se muestra el gráfico
+        plt.show()
+        
+        # Definición del valor a retornar
+        to_return = callback_seleccion.value
+        
+        if to_return is None:
+            print('Seleccione una opción...')
+            return _plot_masked_nmf(signal_in, comps, W, H, num, 
+                                    filepath_to_save, assign_method)
+        else:
+            return to_return 
+    
 
-
-def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save):
+def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=False):
     '''Rutina que permite realizar la gestión del registro de las simulaciones 
     realizadas. Se realiza el guardado los datos, corroboración de simulaciones
     ya existentes (preguntando si es que se quieren realizar nuevamente).
@@ -902,12 +1134,20 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save):
     Destacar que esta sub rutina solo sirve para la función separación total. Además,
     esta función es la que realiza el guardado en este registro.
     
+    Parameters
+    ----------
+    masked_func : bool, optional
+        Usar en True este bool solo para aplicar en la función "nmf_applied_masked_segments".
+        Por defecto es False.
+    
     Returns
     -------
     dict_simulation : dict
         Diccionario actualizado con el id
     continue_dec : bool
         Indica si se sigue trabajando con la señal.
+    to_save : bool
+        Indica si se debe guardar la información posteriormente 
     '''
     def _continue_dec(dict_simulation):
         '''Función auxiliar para decidir continuar con la simulación'''
@@ -931,7 +1171,7 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save):
     id_count = 1
     
     # Definición de un booleano para controlar si se asignó un id
-    id_assigned = False 
+    id_assigned = False
     
     # Se intenta porque puede ser que el archivo no esté creado
     try:
@@ -946,6 +1186,9 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save):
                 
                 # Y se eliminan los labels para luego realizar una comparación
                 del dict_line['id']
+                
+                if masked_func:
+                    del dict_line['heart decision']
                 
                 # Y se comparan los parámetros utilizados
                 if dict_simulation == dict_line:
@@ -974,18 +1217,24 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save):
         # Y se concatenan
         dict_id.update(dict_simulation)
         dict_simulation = dict_id
+        
+        # Se escribe de manera directa solo si es que no es la función masked (es decir,
+        # la función nmf_applied_all)
+        if not masked_func:
+            # Se escribe sobre el archivo solo si es que no ha sido asignado previanente
+            with open(f'{filepath_to_save}/Simulation register.txt', 'a', encoding='utf8') as data:
+                data.write(f'{dict_simulation}\n')
+        
+        return dict_simulation, True, True
+        
     else:
         # Decisión para seguir con la simulación
         continue_dec =  _continue_dec(dict_simulation)
         
         if not continue_dec:
-            return dict_simulation, False
-
-    # Se obtienen las componetes a partir de las etiquetas generadas
-    with open(f'{filepath_to_save}/Simulation register.txt', 'a', encoding='utf8') as data:
-        data.write(f'{dict_simulation}\n')
-    
-    return dict_simulation, True
+            return dict_simulation, False, False
+        else:
+            return dict_simulation, True, False
 
 
 def _manage_registerdata_segments_nmf(dict_simulation, assign_method, 
@@ -1097,11 +1346,21 @@ def _manage_registerdata_segments_nmf(dict_simulation, assign_method,
 
 # Module testing
 filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - 1_Heart 1_Resp 0_White noise'
+dir_file = f'{filepath}/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60].wav'
 
-comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=True,
-                                       plot_show=False, id_rev=1)
+nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=500,
+                            noverlap=1024, padding=0,
+                            window='hamming', whole=False, alpha_wiener=1, 
+                            wiener_filt=True, init='random', solver='cd', beta=2,
+                            tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                            random_state=0, W_0=None, H_0=None, 
+                            plot_segments=True)
 
 '''
+
+comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=True,
+                                       plot_show=False, id_rev=2)
+
 get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual',  
                         n_components=2, N=4096, N_lax=0, N_fade=500, 
                         noverlap=1024, padding=0, window='hamming', whole=False, 

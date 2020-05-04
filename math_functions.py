@@ -227,3 +227,40 @@ def raised_cosine_fading(N, beta, side='right'):
         vanish_window = 1 - rc_out[N:]
     
     return vanish_window
+
+
+
+def db_coef(db):
+	'''Función que obitene el coeficiente por el cual se debe multiplicar un arreglo
+	para obtener el valor de decibel deseado (relativo).
+	
+	Parameters
+	----------
+	db : float
+		Valor de dB deseado para realizar una transformación.
+
+	Returns
+	-------
+	db_value : float
+		Valor por el que se debe multiplicar un arreglo para obtener el decibel 
+		deseado.
+	'''
+    return 10 ** (db/20)
+
+
+def db_attenuation(signal_in, db):
+	'''Función que permite atenuar una señal a partir de su valor en dB
+
+	Parameters
+	----------
+	signal_in : ndarray
+		Señal a atenuar.
+	dB : float
+		Valor de atenuación en dB (positivo para atenuar).
+
+	Returns
+	-------
+	signal_attenuated : ndarray
+		Señal atenuada en db dB.
+	'''
+    return signal_in * db_coef(-db)

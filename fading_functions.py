@@ -1,5 +1,6 @@
 import numpy as np
 from math_functions import raised_cosine_fading
+import matplotlib.pyplot as plt
 
 
 def fading_signal(signal_in, N, beta=1, side='both'):

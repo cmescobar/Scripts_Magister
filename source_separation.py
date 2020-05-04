@@ -1,4 +1,5 @@
 import os
+import ctypes
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
@@ -6,10 +7,9 @@ from tqdm import tqdm
 from ast import literal_eval
 from sklearn.decomposition import NMF
 from matplotlib.widgets import Button
-from fading_functions import fade_connect_signals
-from filter_and_sampling import resampling_by_points
+from filter_and_sampling import resampling_by_points, lowpass_filter
+from fading_functions import fade_connect_signals, fading_signal
 from math_functions import wiener_filter, raised_cosine_fading
-from math_functions import raised_cosine_modified as raicos_mod
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 
 
@@ -17,7 +17,8 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=10
                       padding=0, window='hamming', whole=False, alpha_wiener=1,  
                       wiener_filt=True, init='random', solver='cd', beta=2,
                       tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
-                      random_state=None, W_0=None, H_0=None, same_outshape=True):
+                      random_state=None, W_0=None, H_0=None, same_outshape=True,
+                      plot_spectrogram=False):
     '''Función que permite separar una señal utilizando la descomposición NMF,
     la cual usa como entrada al sistema el espectrograma de la señal de audio.
     Además utiliza todos los parámetros relevantes para este estudio del comando
@@ -106,11 +107,18 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=10
     Y_list = []
     
     # Obteniendo el espectrograma
-    _, _, S = get_spectrogram(signal_in, samplerate, N=N, padding=padding, 
+    t, f, S = get_spectrogram(signal_in, samplerate, N=N, padding=padding, 
                               noverlap=noverlap, window=window, whole=whole)
-    
+        
     # Definiendo la magnitud del espectrograma (elemento a estimar)
     X = np.abs(S)
+    
+    if plot_spectrogram:
+        plt.pcolormesh(t, f, 20*np.log10(X + 1e-12), cmap='inferno')
+        plt.colorbar()
+        plt.ylabel('Frequency [Hz]')
+        plt.xlabel('Time [sec]')
+        plt.show()
     
     # Definiendo el modelo de NMF
     model = NMF(n_components=n_components, init=init, solver=solver,
@@ -264,11 +272,17 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
     ----------
     filepath : str
         Dirección dónde se encuentran los archivos de audio a procesar.
+    sep_type : {'to all', 'on segments', 'masked segments'}, optional
+        Selección del tipo de la base generada por la separación mediante NMF. 'to all' 
+        usa la base que separa toda la señal con NMF, 'on_segments' usa la base que 
+        solamente separa con NMF en segmentos de interés y 'masked segments' usa la base 
+        que es separada luego de aplicar una máscara que hace que solo quede lo que debiera 
+        ser el corazón. Por defecto es 'to all'.
     assign_method : {'auto', 'manual'}, optional
         Método de separación de sonidos. Para 'auto', se utiliza una lista de etiquetas 
         creadas manualmente. Para 'manual' se etiqueta segmento a segmento cada componente, 
         las cuales son guardadas en un archivo .txt. Por defecto es 'manual'. (Solo útil 
-        para sep_type == "on segments").
+        para sep_type == "on segments" o "masked segments").
     kwargs : Parámetros a revisar en NMF segments
     '''
     # Lista de los archivos de la carpeta
@@ -330,6 +344,18 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
                                         n_components=n_components, N=N, 
                                         N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
                                         padding=padding, window=window, whole=whole,
+                                        alpha_wiener=alpha_wiener, 
+                                        wiener_filt=wiener_filt, init=init, 
+                                        solver=solver, beta=beta, tol=tol, 
+                                        max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                        l1_ratio=l1_ratio, random_state=random_state, 
+                                        W_0=W_0, H_0=H_0, plot_segments=plot_segments)
+            
+        elif sep_type == 'masked segments':
+            nmf_applied_masked_segments(dir_audio, assign_method=assign_method, 
+                                        n_components=n_components, N=N, 
+                                        N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+                                        padding=padding, window=window, whole=whole, 
                                         alpha_wiener=alpha_wiener, 
                                         wiener_filt=wiener_filt, init=init, 
                                         solver=solver, beta=beta, tol=tol, 
@@ -417,8 +443,8 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
                                   random_state=0, W_0=None, H_0=None, 
                                   plot_segments=False):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
-    ubicación en el ordenador), la cual solamente descompone en segmentos de interés
-    previamente etiquetados.
+    ubicación en el ordenador), la cual solamente descompone los segmentos de interés
+    previamente etiquetados, uno a uno.
     
     Parameters
     ----------
@@ -597,13 +623,58 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
 
 
 def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2, 
-                                N=2048, N_lax=0, N_fade=500, noverlap=1024, padding=0,
+                                N=2048, N_lax=0, N_fade=100, noverlap=1024, padding=0,
                                 window='hamming', whole=False, alpha_wiener=1, 
                                 wiener_filt=True, init='random', solver='cd', beta=2,
                                 tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                                 random_state=0, W_0=None, H_0=None, 
                                 plot_segments=False):
-    '''
+    '''Función que permite obtener la descomposición NMF de una señal (ingresando su
+    ubicación en el ordenador), la cual solamente descompone en segmentos de interés
+    previamente etiquetados, aplicando una máscara y descomponiendo la señal completa.
+    
+    Parameters
+    ----------
+    dir_file : str
+        Dirección del archivo de audio a segmentar.
+    assign_method : {'auto', 'manual'}, optional
+        Método de separación de sonidos. Para 'auto', se utiliza una lista de etiquetas
+        creadas manualmente. Para 'manual' se etiqueta segmento a segmento cada componente, 
+        las cuales son guardadas en un archivo .txt. Por defecto es 'manual'.
+    n_components : int, optional
+        Cantidad de componentes a separar la señal. Por defecto es 2.
+    N : int, optional
+        Cantidad de puntos utilizados en cada ventana de la STFT. Por defecto es 2048.
+    N_lax : int, optional
+        Cantidad de puntos adicionales que se consideran para cada lado más allá de los
+        intervalos dados. Por defecto es 1500.
+    N_fade : int, optional
+        Cantidad de puntos utilizados para que la ventana se mezcle con fade. Por defecto
+        es 500.
+    noverlap : float, optional
+        Cantidad de puntos de traslape que existe entre una ventana y la siguiente al 
+        calcular la STFT. Por defecto es 1024.
+    padding : int, optional
+        Cantidad de ceros añadidos al final para aplicar zero padding. Por defecto es 0.
+    window : {None, 'hamming', 'hann', 'nutall', 'tukey'}, optional
+        Opciones para las ventanas a utilizar en el cálculo de cada segmento del STFT.
+        En caso de elegir None, se asume la ventana rectangular. Por defecto es 'hamming'.
+    whole : bool, optional
+        Indica si se retorna todo el espectro de frecuencia de la STFT o solo la mitad 
+        (por redundancia). True lo entrega completo, False la mtiad. Por defecto es False.
+    alpha_wiener : int, optional
+        Exponente alpha del filtro de Wiener. Por defecto es 1.
+    wiener_filt : bool, optional
+        Indica si se aplica el filtro de wiener una vez separado ambas componentes.
+        Por defecto es True.
+    **kwargs : Revisar nmf_decomposition para el resto.
+    
+    Returns
+    -------
+    resp_signal : ndarray
+        Señal respiratoria aproximada mediante la descomposición.
+    heart_signal : ndarray
+        Señal cardíaca aproximada mediante la descomposición.
     '''
     # Abriendo el archivo de sonido
     signal_in, samplerate = sf.read(f'{dir_file}')
@@ -646,6 +717,8 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     to_decompose = np.zeros(len(signal_in))
     # Definición de la señal respiratoria de salida
     resp_signal = np.copy(signal_in)
+    # Definición de la señal cardíaca de salida
+    heart_signal = np.zeros(len(signal_in))
     
     # Definición del diccionario que contiene los parámetros de simulación
     dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
@@ -667,28 +740,27 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     
     # Definición del filepath a guardar para la simulación
     filepath_to_save_id = f'{filepath_to_save}/id {dict_simulation["id"]}'
+    filepath_to_save_name = f'{filepath_to_save_id}/{filename}'
     
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
-    if not os.path.isdir(filepath_to_save_id):
-        os.makedirs(filepath_to_save_id)
+    if not os.path.isdir(filepath_to_save_name):
+        os.makedirs(filepath_to_save_name)
     
     # Transformando la señal 
-    for num, interval in enumerate(interval_list, 1):
+    for interval in interval_list:
         # Definición del límite inferior y superior
         lower = interval[0] - N_lax
         upper = interval[1] + N_lax
         
         # Agregando los valores de la señal a descomponer
-        to_decompose[lower:upper] = signal_in[lower:upper]
-    
-    # Corrigiendo la señal respiratoria con lo que se había quitado
-    resp_signal -= to_decompose
-    
-    plt.plot(resp_signal)
+        to_decompose_faded = fading_signal(signal_in[lower - N_fade:upper + N_fade],
+                                           N_fade, beta=1, side='both')
+        
+        to_decompose[lower - N_fade:upper + N_fade] += to_decompose_faded
+        resp_signal[lower:upper] -= signal_in[lower:upper]
     plt.plot(to_decompose)
     plt.show()
-    
     # Aplicando NMF 
     comps, _, _, W, H = nmf_decomposition(to_decompose, samplerate, 
                                           n_components=n_components, 
@@ -699,18 +771,33 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
                                           solver=solver, beta=beta, tol=tol, 
                                           max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                           l1_ratio=l1_ratio, random_state=random_state,
-                                          W_0=W_0, H_0=H_0)
-    
+                                          W_0=W_0, H_0=H_0)#, plot_spectrogram=True)
+
     # Graficos
-    if plot_segments:
-        decision_in_plot = _plot_masked_nmf(signal_in, comps, W, H, num, 
-                                            filepath_to_save, assign_method)
+    if plot_segments or assign_method == 'manual':
+        decision_in_plot = _plot_masked_nmf(signal_in, comps, W, H, 
+                                            filepath_to_save_name, assign_method)
     
     if assign_method == 'auto':
-        # Se obtiene la decisión etiquetada como sonido cardíaco
-        heart_decision = None
-        print('No implementado')
-        return
+        # Si not tiene to_save, entonces es porque ya existe
+        if not to_save:
+            # Se obtiene la decisión etiquetada como sonido cardíaco
+            with open(f'{filepath_to_save}/Simulation register.txt', 'r', encoding='utf8') as data:
+                for line in data:
+                    dict_line = literal_eval(line.strip())
+
+                    # Se obtienen los componentes tentativos
+                    possible_heart_dec = dict_line['heart decision']
+                    
+                    # Y se eliminan los labels para luego realizar una comparación
+                    del dict_line['heart decision']
+
+                    if dict_line == dict_simulation:
+                        heart_decision = possible_heart_dec
+        
+        else:
+            raise Exception('No la simulación realizada. Realícela primero para obtener la '
+                            'decisión en la base de datos.')
         
     elif assign_method == 'manual':
         # Se pregunta para la decisión del sonido cardíaco
@@ -718,11 +805,34 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     
     # Y se complementa para el sonido respiratorio
     resp_decision = 0 if heart_decision == 1 else 1
-    
-    # Reconstrucción de las señales
-    heart_signal = comps[heart_decision]
-    resp_signal += comps[resp_decision]
-    
+      
+    # Para conectarlas adecuadamente a la señal de interés
+    for num, interval in enumerate(interval_list, 1):
+        # Definición del límite inferior y superior
+        lower = interval[0] - N_lax
+        upper = interval[1] + N_lax
+
+        # Graficando los segmentos
+        _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision, 
+                              lower, upper, N_fade, num, filepath_to_save_name)
+        
+        # Definición de la lista de señales a concatenar con fading para el corazón
+        heart_connect = (heart_signal[:lower], comps[heart_decision][lower-N_fade:upper+N_fade], 
+                         heart_signal[upper:])
+        # Definición de la lista de señales a concatenar con fading para la respiración
+        resp_connect = (resp_signal[:lower], comps[resp_decision][lower - N_fade:upper + N_fade], 
+                        resp_signal[upper:])
+
+        #plt.plot(range(0,lower), resp_signal[:lower], color='C0', zorder=2)
+        #plt.plot(range(lower - N_fade,upper + N_fade), 
+        #        comps[resp_decision][lower - N_fade:upper + N_fade], color='C1', zorder=2)
+        #plt.plot(range(upper, len(resp_signal)), resp_signal[upper:], color='C2', zorder=2)
+        #plt.plot(resp_signal, linewidth=5, color='C3', zorder=1)
+        
+        # Aplicando fading para cada uno
+        heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
+        resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
+
     # Se agrega la decisión al diccionario
     dict_simulation['heart decision'] = heart_decision
     
@@ -732,24 +842,36 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
             data.write(f'{dict_simulation}\n')
     
     # Finalmente, grabando los archivos de audio
-    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, samplerate)
-    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, samplerate)
+    sf.write(f'{filepath_to_save_name}/Respiratory signal.wav', resp_signal, samplerate)
+    sf.write(f'{filepath_to_save_name}/Heart signal.wav', heart_signal, samplerate)
     
     return resp_signal, heart_signal
 
-def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=False,
+
+def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=True,
                                            plot_show=False, id_rev=1):
-    '''
+    '''Rutina que permite realizar la comparación entre las señales obtenidas mediante
+    distintas variantes de descomposición mediante NMF con sus respectivas señales 
+    originales.
     
     Parameters
     ----------
-    sep_type : {'to all', 'on segments'}, optional
-        Selección del tipo de la base generada por la separación mediante NMF. 'to all' 
-        usa la base que separa toda la señal con NMF y 'on_segments' usa la base que
-        solamente separa con NMF en segmentos de interés. Por defecto es 'to all'.
-    id_rev : int, optional
+    filepath : str
+        Dirección dónde se encuentran los archivos de audio a procesar.
+    id_rev : int
         En caso de seleccionar sep_type == "on segments", corresponde al identificador 
-        de la base a usar. Por defecto es 1.
+        de la base a usar.
+    sep_type : {'to all', 'on segments', 'masked segments'}, optional
+        Selección del tipo de la base generada por la separación mediante NMF. 'to all' 
+        usa la base que separa toda la señal con NMF, 'on_segments' usa la base que 
+        solamente separa con NMF en segmentos de interés y 'masked segments' usa la base 
+        que es separada luego de aplicar una máscara que hace que solo quede lo que debiera 
+        ser el corazón. Por defecto es 'to all'.
+    plot_signals : bool, optional
+        Decidir si se realizan gráficos.
+    plot_show : bool, optional
+        Decidir si se muestran los gráficos a medida que salen (debe cumplirse que 
+        plot_signals == True). Por defecto es False.
     '''
     # Lista de los archivos de la carpeta
     filenames = [i for i in os.listdir(filepath) if i.endswith('.wav')]
@@ -759,6 +881,8 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
         filepath_comps = f'{filepath}/Components/Separation to all/id {id_rev}'
     elif sep_type == 'on segments':
         filepath_comps = f'{filepath}/Components/Separation on segments'
+    elif sep_type == 'masked segments':
+        filepath_comps = f'{filepath}/Components/Masking on segments'
     else:
         raise Exception('Opción no válida para tipo de separación.')
     
@@ -782,19 +906,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
         if sep_type == 'to all':
             comp_1, _ = sf.read(f'{filepath_comps}/{audio_name.strip(".wav")} Comp 1.wav')
             comp_2, _ = sf.read(f'{filepath_comps}/{audio_name.strip(".wav")} Comp 2.wav')
-            
-            # Resampleando para igual número de muestras
-            '''comp_1 = resampling_by_points(comp_1, 44100, len(audio_resp), trans_width=50,
-                                        resample_method='interp1d', lp_method='fir', 
-                                        fir_method='kaiser', gpass=1, gstop=80, 
-                                        correct_by_gd=True, gd_padding='periodic',
-                                        plot_filter=False, normalize=True)
-            comp_2 = resampling_by_points(comp_2, 44100, len(audio_resp), trans_width=50,
-                                        resample_method='interp1d', lp_method='fir', 
-                                        fir_method='kaiser', gpass=1, gstop=80, 
-                                        correct_by_gd=True, gd_padding='periodic',
-                                        plot_filter=False, normalize=True)
-            '''
+
             # Definición Heart comp
             heart_index = np.argmin((sum(abs(audio_heart - comp_1)),
                                     sum(abs(audio_heart - comp_2))))
@@ -804,11 +916,15 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             # Definición de señal respiratoria como el complemento del resultado anterior
             resp_comp = comp_2 if heart_index == 0 else comp_1
             
-        else:
+        elif sep_type == 'on segments':
             heart_comp, _ = sf.read(f'{filepath_comps}/{audio_name.strip(".wav")}/'
                                     f'id {id_rev}/Heart signal.wav')
             resp_comp, _ = sf.read(f'{filepath_comps}/{audio_name.strip(".wav")}/'
                                    f'id {id_rev}/Respiratory signal.wav')
+        
+        elif sep_type == 'masked segments':
+            heart_comp, _ = sf.read(f'{filepath_comps}/id {id_rev}/Heart signal.wav')
+            resp_comp, _ = sf.read(f'{filepath_comps}/id {id_rev}/Respiratory signal.wav')
         
         # Normalización de todas las señales
         audio_resp_norm = audio_resp / max(abs(audio_resp))
@@ -1028,7 +1144,7 @@ def _plot_segments_nmf(signal_in, comps, W, H, N_fade, lower, upper,
             return to_return 
 
 
-def _plot_masked_nmf(signal_in, comps, W, H, num, filepath_to_save, assign_method):
+def _plot_masked_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
     '''Función auxiliar que permite realizar los gráficos en la función
     "nmf_applied_masked_segments".
     '''
@@ -1062,9 +1178,9 @@ def _plot_masked_nmf(signal_in, comps, W, H, num, filepath_to_save, assign_metho
     fig, ax = plt.subplots(1, 3, figsize=(17,7))
     
     # Plots
-    ax[0].plot(signal_in, label='Original', linewidth=3, color='C2')
-    ax[0].plot(comps[0], label='Comp 1', color='C0')
-    ax[0].plot(comps[1], label='Comp 2', color='C1')
+    ax[0].plot(signal_in, label='Original', linewidth=3, color='C2', zorder=1)
+    ax[0].plot(comps[0], label='Comp 1', color='C0', zorder=2)
+    ax[0].plot(comps[1], label='Comp 2', color='C1', zorder=2)
     ax[0].legend(loc='upper right')
     ax[0].set_title('Señales')
     
@@ -1080,10 +1196,10 @@ def _plot_masked_nmf(signal_in, comps, W, H, num, filepath_to_save, assign_metho
     ax[2].set_title('Matriz H')
     
     # Definición del título
-    fig.suptitle(f'Segment #{num}')
+    fig.suptitle(f'Complete signal')
     
     # Se guarda la figura
-    fig.savefig(f'{filepath_to_save}/Segment {num}.png') 
+    fig.savefig(f'{filepath_to_save}/Signal plot.png') 
     
     if assign_method == 'manual':
         # Manager para modificar la figura actual y maximizarla
@@ -1116,11 +1232,39 @@ def _plot_masked_nmf(signal_in, comps, W, H, num, filepath_to_save, assign_metho
         
         if to_return is None:
             print('Seleccione una opción...')
-            return _plot_masked_nmf(signal_in, comps, W, H, num, 
+            return _plot_masked_nmf(signal_in, comps, W, H, 
                                     filepath_to_save, assign_method)
         else:
             return to_return 
+
+
+def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision, 
+                              lower, upper, N_fade, num, filepath_to_save):
+    '''Función auxiliar que permite guardar las imágenes de cada segmento en la 
+    función "nmf_applied_masked_segments".
+    '''
+    # Creación de la figura
+    plt.figure(figsize=(17,9))
     
+     # Graficando cada segmento de la señal
+    plt.plot(range(lower - N_fade, upper + N_fade), 
+             signal_in[lower - N_fade:upper + N_fade],
+             linewidth=3, zorder=1, color='C2', label='Original')
+    plt.plot(range(lower - N_fade, upper + N_fade), 
+             comps[heart_decision][lower - N_fade:upper + N_fade], 
+             color='C0', zorder=2, label='Heart')
+    plt.plot(range(lower - N_fade,upper + N_fade), 
+             comps[resp_decision][lower - N_fade:upper + N_fade], 
+             color='C1', zorder=2, label='Respiration')
+    
+    # Labels y títulos
+    plt.xlabel('Muestras')
+    plt.ylabel('Señales')
+    plt.legend(loc='upper right')
+    plt.suptitle(f'Segment #{num}')
+    plt.savefig(f'{filepath_to_save}/Segment #{num}.png')
+    plt.close()
+
 
 def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=False):
     '''Rutina que permite realizar la gestión del registro de las simulaciones 
@@ -1149,23 +1293,27 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=
     to_save : bool
         Indica si se debe guardar la información posteriormente 
     '''
+    def Mbox(title, text, style):
+        '''Función que permite crear una ventana para realizar consultas'''
+        return ctypes.windll.user32.MessageBoxW(0, text, title, style)
+        
     def _continue_dec(dict_simulation):
         '''Función auxiliar para decidir continuar con la simulación'''
-        while True:
-            # Preguntar si es que se quiere hacer la simulación de nuevo en caso de que 
-            # ya exista
-            continue_decision = input('La simulación que quieres hacer ya fue realizada '
-                                      f'(en id: {dict_simulation["id"]}), '
-                                      '¿deseas hacerla nuevamente? [y/n]: ')
+        # Definición de valores
+        title = 'Advertencia (!)'
+        text = f'La simulación que quieres hacer ya fue realizada (en id: '\
+               f'{dict_simulation["id"]}), ¿deseas hacerla nuevamente?'
+
+        # Preguntar si es que se quiere hacer la simulación de nuevo en caso de que 
+        # ya exista
+        continue_decision = Mbox(title, text, 1)
             
-            if continue_decision == 'y':
-                return True
+        if continue_decision == 1:
+            return True
             
-            elif continue_decision == 'n':
-                print('Función terminada.\n')
-                return False
-                
-            print('Opción no válida.\n')
+        elif continue_decision == 2:
+            print('Función terminada.\n')
+            return False
     
     # Definición del contador de líneas (que servirá como id de cada simulación)
     id_count = 1
@@ -1347,10 +1495,9 @@ def _manage_registerdata_segments_nmf(dict_simulation, assign_method,
 # Module testing
 filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - 1_Heart 1_Resp 0_White noise'
 dir_file = f'{filepath}/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60].wav'
-
 nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=500,
                             noverlap=1024, padding=0,
-                            window='hamming', whole=False, alpha_wiener=1, 
+                            window='hann', whole=False, alpha_wiener=1, 
                             wiener_filt=True, init='random', solver='cd', beta=2,
                             tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                             random_state=0, W_0=None, H_0=None, 
@@ -1358,14 +1505,25 @@ nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=50
 
 '''
 
-comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_signals=True,
-                                       plot_show=False, id_rev=2)
 
-get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual',  
-                        n_components=2, N=4096, N_lax=0, N_fade=500, 
-                        noverlap=1024, padding=0, window='hamming', whole=False, 
+
+get_components_HR_sounds(filepath, sep_type='masked segments', assign_method='manual',  
+                        n_components=2, N=2048, N_lax=0, N_fade=500, 
+                        noverlap=1024, padding=0, window='hann', whole=False, 
                         alpha_wiener=1, wiener_filt=True, init='random', 
                         solver='cd', beta=2, tol=1e-4, max_iter=200, 
                         alpha_nmf=0, l1_ratio=0, random_state=0, 
                         W_0=None, H_0=None, plot_segments=False)
+nmf_applied_interest_segments(dir_file, assign_method='manual', n_components=2, 
+                                N=2048, N_lax=0, N_fade=500, noverlap=1024, padding=0,
+                                window='hamming', whole=False, alpha_wiener=1, 
+                                wiener_filt=True, init='random', solver='cd', beta=2,
+                                tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                                random_state=0, W_0=None, H_0=None, 
+                                plot_segments=False)
+
+
+
+comparison_components_nmf_ground_truth(filepath, id_rev=1, sep_type='on segments', 
+                                       plot_signals=True, plot_show=True)
 '''

@@ -474,11 +474,12 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
 
 
 # Testing module
-filepaths = ['Database_manufacturing/db_HR/Seed-0 - 1_Heart 1_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 2_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 3_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 5_Resp 0_White noise',
-             'Database_manufacturing/db_HR/Seed-0 - 1_Heart 10_Resp 0_White noise']
+filepaths = \
+    ['Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 1_Resp 1_White noise',
+    'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 2_Resp 0_White noise',
+    'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 3_Resp 0_White noise',
+    'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 5_Resp 0_White noise',
+    'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 10_Resp 0_White noise']
 
 freqs_bp = [50,100,250,300]
 levels_to_get = [[3], [4], [5], [3,4], [3,5], [4,5], [3,4,5]]
@@ -488,7 +489,7 @@ for filepath in filepaths:
     for levels in levels_to_get:
         print(f'Level: {levels}')
         get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
-                                 freqs_bp=freqs_bp, upsample_method='interp1d', 
+                                 freqs_bp=[], upsample_method='interp1d', 
                                  down_stret_method='lowpass', lp_method='fir',
                                  fir_method='kaiser', gpass=1, gstop=80,
                                  levels_to_get=levels,
@@ -497,7 +498,7 @@ for filepath in filepaths:
                                  threshold_criteria='hard', threshold_delta='universal',
                                  min_percentage=None, print_delta=False,
                                  plot_show=False, plot_precision_info=True, 
-                                 clean_repeated=True, distance_limit=44100,
+                                 clean_repeated=True, distance_limit=4410,
                                  normalize=True)
 
 

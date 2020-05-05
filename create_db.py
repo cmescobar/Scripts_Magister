@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from itertools import product
 from matplotlib.lines import Line2D
-from math_functions import raised_cosine_modified
+from math_functions import raised_cosine_modified, db_attenuation
 from filter_and_sampling import resampling_by_points
 
 
@@ -638,8 +638,8 @@ def get_heart_sounds_by_name(name, filepath, N_periods=30, seed=0,
         print('Completed!\n')
 
 
-def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp=1, 
-                                 a_noise=0, seed=0):
+def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', 
+                                 a_heart=1, a_resp=1, a_noise=0, seed=0):
     '''Rutina que permite crear los sonidos cardíacos + respiratorios en una carpeta, tomando como
     base los archivos disponibles en "dir_to_heart" y "db_respiratory/Original".
     
@@ -651,6 +651,11 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp
         Opción para la creación de la base de datos. 'SS' crea una base para separación
         de fuentes, y 'HS' crea una base de datos para segmentación de sonidos cardiacos.
         Por defecto es 'SS'.
+    db_scale : {'abs', 'dB'}, optional
+        Escala en la cual se mezclan las señales de audio. Para 'abs', los coeficientes "a"
+        representan un factor de multiplicación para cada sonido normalizado: Para 'dB', 
+        los coeficientes "a" representan los dB de atenuación aplicados a cada sonido.
+        Por defecto es 'abs'.
     a_heart : float, optional
         Ponderación del sonido cardíaco en la mezcla. Por defecto es 1.
     a_resp : float, optional
@@ -674,10 +679,13 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp
     # Lista de sonidos respiratorios
     resp_sounds = [i for i in os.listdir(dir_to_resp) if i.endswith('.wav')] 
     
+    # Definición de indicador de scala
+    scale_ind = 'dB' if db_scale == 'dB' else 'x'
+    
     if db_option == 'SS':
         # Definición del directorio donde se guardará
         folder_save = f'Database_manufacturing/db_HR/Source Separation/'\
-                    f'Seed-{seed} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+                f'Seed-{seed} - {scale_ind} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
         
         # Definición de las posibles combinaciones entre sonidos
         combinations = tuple(zip(resp_sounds, heart_sounds))
@@ -685,7 +693,7 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp
     elif db_option == 'HS':
         # Definición del directorio donde se guardará
         folder_save = f'Database_manufacturing/db_HR/Heart Segmentation/'\
-                    f'Seed-{seed} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+                f'Seed-{seed} - {scale_ind} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
         
         # Definición de las posibles combinaciones entre sonidos
         combinations = tuple(product(resp_sounds, heart_sounds))
@@ -713,13 +721,23 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp
         
         # Creación del ruido blanco
         white_noise = np.random.normal(0, 1, length)
-        # Normalizando este sonido
+        
+        # Normalizando los sonidos
+        heart_to_sum = heart_to_sum / max(abs(heart_to_sum))
+        resp_to_sum = resp_to_sum / max(abs(resp_to_sum))
         white_noise = white_noise / max(abs(white_noise))
 
         # Sonido cardíaco + respiratorio + ruido
-        hr_sound = a_resp * resp_to_sum + a_heart * heart_to_sum + a_noise * white_noise
+        if db_scale == 'abs':
+            hr_sound = a_resp * resp_to_sum + a_heart * heart_to_sum + a_noise * white_noise
+        elif db_scale == 'dB':
+            hr_sound = db_attenuation(heart_to_sum, a_heart) + \
+                       db_attenuation(resp_to_sum, a_resp) + \
+                       db_attenuation(white_noise, a_noise)
+        else:
+            raise Exception('Opción de escala incorrecta.')
         
-        # Noramlizando el sonido
+        # Noramlizando el sonido obtenido
         hr_sound = hr_sound / max(abs(hr_sound))
         
         # Definición del nombre de los archivos

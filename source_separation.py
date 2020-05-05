@@ -989,8 +989,8 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             
             # Definición de los coeficientes a ponderar para esta base
             name_info = filepath.split('/')[-1].split(' ')
-            coef_heart = int(name_info[2].split('_')[0])
-            coef_resp = int(name_info[3].split('_')[0])
+            coef_heart = int(name_info[4].split('_')[0])
+            coef_resp = int(name_info[5].split('_')[0])
             
             # Señales a comparar
             original_signal = coef_resp * audio_resp + coef_heart * audio_heart
@@ -1502,7 +1502,7 @@ nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=50
                             tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                             random_state=0, W_0=None, H_0=None, 
                             plot_segments=True)
-
+print()
 '''
 
 

@@ -258,7 +258,7 @@ def nmf_decomposition_2(signal_in, samplerate, n_components=2, N=2048, noverlap=
     return components, Y_list, X, W, H
 
 
-def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual',  
+def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual', 
                              n_components=2, N=2048, N_lax=1500, N_fade=500, 
                              noverlap=1024, padding=0, window='hamming', whole=False, 
                              alpha_wiener=1, wiener_filt=True, init='random', 
@@ -291,14 +291,6 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
     # Para este caso es necesario hacerlo antes del for ya que no se crea un registro para
     # cada archivo como en el caso sep_type == "on segment"
     if sep_type == 'to all':
-        # Definición del filepath a guardar
-        filepath_to_save = f'{filepath}/Components/Separation to all'
-        
-        # Preguntar si es que la carpeta que almacenará las imágenes se ha
-        # creado. En caso de que no exista, se crea una carpeta
-        if not os.path.isdir(filepath_to_save):
-            os.makedirs(filepath_to_save)
-                
         # Definición del diccionario que contiene los parámetros de simulación
         dict_simulation = {'n_components': n_components, 'N': N,
                            'noverlap': noverlap, 'padding': padding,
@@ -307,6 +299,14 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
                            'solver': solver, 'beta': beta, 'tol': tol, 
                            'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
                            'l1_ratio': l1_ratio, 'random_state': random_state}
+        
+        # Definición del filepath a guardar
+        filepath_to_save = f'{filepath}/Components/Separation to all'
+        
+        # Preguntar si es que la carpeta que almacenará las imágenes se ha
+        # creado. En caso de que no exista, se crea una carpeta
+        if not os.path.isdir(filepath_to_save):
+            os.makedirs(filepath_to_save)
         
         # Refresco del diccionario de simulación
         dict_simulation, continue_dec, _ = _manage_registerdata_all_nmf(dict_simulation, 
@@ -322,6 +322,56 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
         # creado. En caso de que no exista, se crea una carpeta
         if not os.path.isdir(filepath_to_save_id):
             os.makedirs(filepath_to_save_id)
+    
+    elif sep_type == 'on segments':
+        # Definición del diccionario que contiene los parámetros de simulación
+        dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
+                           'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
+                           'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
+                           'wiener_filt': wiener_filt, 'init': init, 
+                           'solver': solver, 'beta': beta, 'tol': tol, 
+                           'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
+                           'l1_ratio': l1_ratio, 'random_state': random_state}
+        
+        # Definición del filepath a guardar
+        filepath_to_save = f'{filepath}/Components/Separation on segments'
+        
+        # Preguntar si es que la carpeta que almacenará las imágenes se ha
+        # creado. En caso de que no exista, se crea una carpeta
+        if not os.path.isdir(filepath_to_save):
+            os.makedirs(filepath_to_save)
+        
+        # Refresco del diccionario de simulación
+        dict_simulation, continue_dec, _ = _manage_registerdata_all_nmf(dict_simulation, 
+                                                                        filepath_to_save)
+        # Seguir con la rutina
+        if not continue_dec:
+            return None
+    
+    elif sep_type == 'masked segments':
+        # Definición del diccionario que contiene los parámetros de simulación
+        dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
+                           'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
+                           'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
+                           'wiener_filt': wiener_filt, 'init': init, 
+                           'solver': solver, 'beta': beta, 'tol': tol, 
+                           'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
+                           'l1_ratio': l1_ratio, 'random_state': random_state}
+        
+        # Definición del filepath a guardar
+        filepath_to_save = f'{filepath}/Components/Masking on segments'
+        
+        # Preguntar si es que la carpeta que almacenará las imágenes se ha
+        # creado. En caso de que no exista, se crea una carpeta
+        if not os.path.isdir(filepath_to_save):
+            os.makedirs(filepath_to_save)
+        
+        # Refresco del diccionario de simulación
+        dict_simulation, continue_dec, _ = _manage_registerdata_all_nmf(dict_simulation, 
+                                                                        filepath_to_save)
+        # Seguir con la rutina
+        if not continue_dec:
+            return None
     
     for audio_name in tqdm(filenames, desc='NMF decomp', ncols=70):
         # Dirección del archivo en la carpeta madre. Este archivo es el que se descompondrá
@@ -341,15 +391,15 @@ def get_components_HR_sounds(filepath, sep_type='to all', assign_method='manual'
             
         elif sep_type == 'on segments':
             nmf_applied_interest_segments(dir_audio, assign_method=assign_method, 
-                                        n_components=n_components, N=N, 
-                                        N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
-                                        padding=padding, window=window, whole=whole,
-                                        alpha_wiener=alpha_wiener, 
-                                        wiener_filt=wiener_filt, init=init, 
-                                        solver=solver, beta=beta, tol=tol, 
-                                        max_iter=max_iter, alpha_nmf=alpha_nmf, 
-                                        l1_ratio=l1_ratio, random_state=random_state, 
-                                        W_0=W_0, H_0=H_0, plot_segments=plot_segments)
+                                          n_components=n_components, N=N, 
+                                          N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+                                          padding=padding, window=window, whole=whole,
+                                          alpha_wiener=alpha_wiener, 
+                                          wiener_filt=wiener_filt, init=init, 
+                                          solver=solver, beta=beta, tol=tol, 
+                                          max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                          l1_ratio=l1_ratio, random_state=random_state, 
+                                          W_0=W_0, H_0=H_0, plot_segments=plot_segments)
             
         elif sep_type == 'masked segments':
             nmf_applied_masked_segments(dir_audio, assign_method=assign_method, 
@@ -499,7 +549,7 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
     filename = dir_file.strip('.wav').split('/')[-1]
         
     # Definición de la carpeta a guardar los segmentos
-    filepath_to_save = f'{filepath}/Components/Separation on segments/{filename}'
+    filepath_to_save = f'{filepath}/Components/Separation on segments'
     
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
@@ -541,9 +591,35 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
                        'l1_ratio': l1_ratio, 'random_state': random_state}
     
     # Control de parámetros simulación (consultar repetir) y asignación de id's
-    dict_simulation, comps_choice, heart_comp_labels, plot_segments, assign_method =\
-        _manage_registerdata_segments_nmf(dict_simulation, assign_method, 
-                                      filepath_to_save, plot_segments)
+    dict_simulation, _, to_save = _manage_registerdata_all_nmf(dict_simulation, 
+                                                               filepath_to_save,
+                                                               masked_func=True,
+                                                               decided=True)
+    
+    # Definición del filepath a guardar para la simulación
+    filepath_to_save_id = f'{filepath_to_save}/id {dict_simulation["id"]}'
+    filepath_to_save_name = f'{filepath_to_save_id}/{filename}'
+    
+    # Preguntar si es que la carpeta que almacenará las imágenes se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(filepath_to_save_name):
+        os.makedirs(filepath_to_save_name)
+    
+    # Definición de la lista de puntos para ambos casos
+    if assign_method == 'auto':
+        # Si no tiene to_save, entonces es porque ya existe
+        if not to_save:
+            # Se obtiene la decisión etiquetada como sonido cardíaco
+            with open(f'{filepath_to_save_name}/Heart comp labels.txt',
+                      'r', encoding='utf8') as data:
+                comps_choice = literal_eval(data.readline().strip())
+        
+        else:
+            raise Exception('No la simulación realizada. Realícela primero para obtener la '
+                            'decisión en la base de datos.')
+    
+    elif assign_method == 'manual':
+        heart_comp_labels = list()
     
     # Aplicando NMF en cada segmento de interés
     for num, interval in enumerate(interval_list, 1):
@@ -565,23 +641,14 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
                                               max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                               l1_ratio=l1_ratio, random_state=random_state,
                                               W_0=W_0, H_0=H_0)
-    
-        # Definición de guardado para cada id
-        filepath_to_save_id = f'{filepath_to_save}/id {dict_simulation["id"]}'
-
-        # Preguntar si es que la carpeta que almacenará las imágenes se ha
-        # creado. En caso de que no exista, se crea una carpeta
-        if not os.path.isdir(filepath_to_save_id):
-            os.makedirs(filepath_to_save_id)
-        
+            
         # Graficos
-        if plot_segments:
+        if plot_segments or assign_method == 'manual':
             decision_in_plot = _plot_segments_nmf(signal_in, comps, W, H, N_fade, 
-                                                  lower, upper, num, filepath_to_save_id, 
+                                                  lower, upper, num, filepath_to_save_name, 
                                                   assign_method)
             
         if assign_method == 'auto':
-            # Se obtiene la decisión etiquetada como sonido cardíaco
             heart_decision = comps_choice[num - 1]
         
         elif assign_method == 'manual':
@@ -606,18 +673,15 @@ def nmf_applied_interest_segments(dir_file, assign_method='manual', n_components
         heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
         resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
     
-    if assign_method == 'manual' and plot_segments:
+    # Finalmente
+    if assign_method == 'manual': # and plot_segments:
         # Finalmente, se escribe las etiquetas de las componentes
-        with open(f'{filepath_to_save}/Heart comp labels.txt', 'a', encoding='utf8') as data:
-            # Se agrega la información de las etiquetas generadas
-            dict_simulation['heart_comp_labels'] = heart_comp_labels
-            
-            # Y se guarda
-            data.write(f'{dict_simulation}\n')
+        with open(f'{filepath_to_save_name}/Heart comp labels.txt', 'w', encoding='utf8') as data:
+            data.write(f'{heart_comp_labels}')
 
     # Finalmente, grabando los archivos de audio
-    sf.write(f'{filepath_to_save_id}/Respiratory signal.wav', resp_signal, samplerate)
-    sf.write(f'{filepath_to_save_id}/Heart signal.wav', heart_signal, samplerate)
+    sf.write(f'{filepath_to_save_name}/Respiratory signal.wav', resp_signal, samplerate)
+    sf.write(f'{filepath_to_save_name}/Heart signal.wav', heart_signal, samplerate)
     
     return resp_signal, heart_signal
 
@@ -730,10 +794,10 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
                        'l1_ratio': l1_ratio, 'random_state': random_state}
     
     # Control de parámetros simulación (consultar repetir) y asignación de id's
-    dict_simulation, continue_dec, to_save =  _manage_registerdata_all_nmf(dict_simulation, 
-                                                                           filepath_to_save,
-                                                                           masked_func=True)
-    
+    dict_simulation, continue_dec, _ = _manage_registerdata_all_nmf(dict_simulation, 
+                                                                    filepath_to_save,
+                                                                    masked_func=True,
+                                                                    decided=True)
     # Seguir con la rutina
     if not continue_dec:
         return None
@@ -759,8 +823,10 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
         
         to_decompose[lower - N_fade:upper + N_fade] += to_decompose_faded
         resp_signal[lower:upper] -= signal_in[lower:upper]
-    plt.plot(to_decompose)
-    plt.show()
+    
+    # plt.plot(to_decompose)
+    # plt.show()
+    
     # Aplicando NMF 
     comps, _, _, W, H = nmf_decomposition(to_decompose, samplerate, 
                                           n_components=n_components, 
@@ -771,7 +837,7 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
                                           solver=solver, beta=beta, tol=tol, 
                                           max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                           l1_ratio=l1_ratio, random_state=random_state,
-                                          W_0=W_0, H_0=H_0)#, plot_spectrogram=True)
+                                          W_0=W_0, H_0=H_0) #, plot_spectrogram=True)
 
     # Graficos
     if plot_segments or assign_method == 'manual':
@@ -779,26 +845,10 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
                                             filepath_to_save_name, assign_method)
     
     if assign_method == 'auto':
-        # Si not tiene to_save, entonces es porque ya existe
-        if not to_save:
-            # Se obtiene la decisión etiquetada como sonido cardíaco
-            with open(f'{filepath_to_save}/Simulation register.txt', 'r', encoding='utf8') as data:
-                for line in data:
-                    dict_line = literal_eval(line.strip())
-
-                    # Se obtienen los componentes tentativos
-                    possible_heart_dec = dict_line['heart decision']
-                    
-                    # Y se eliminan los labels para luego realizar una comparación
-                    del dict_line['heart decision']
-
-                    if dict_line == dict_simulation:
-                        heart_decision = possible_heart_dec
-        
-        else:
-            raise Exception('No la simulación realizada. Realícela primero para obtener la '
-                            'decisión en la base de datos.')
-        
+        # Se obtiene la decisión etiquetada como sonido cardíaco
+        with open(f'{filepath_to_save_name}/Heart decision.txt', 'r', encoding='utf8') as data:
+            heart_decision = literal_eval(data.readline().strip())
+    
     elif assign_method == 'manual':
         # Se pregunta para la decisión del sonido cardíaco
         heart_decision = decision_in_plot
@@ -837,9 +887,8 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     dict_simulation['heart decision'] = heart_decision
     
     # Registro del archivo de la simulación
-    if to_save:
-        with open(f'{filepath_to_save}/Simulation register.txt', 'a', encoding='utf8') as data:
-            data.write(f'{dict_simulation}\n')
+    with open(f'{filepath_to_save_name}/Heart decision.txt', 'w', encoding='utf8') as data:
+        data.write(f'{heart_decision}')
     
     # Finalmente, grabando los archivos de audio
     sf.write(f'{filepath_to_save_name}/Respiratory signal.wav', resp_signal, samplerate)
@@ -1266,7 +1315,8 @@ def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision,
     plt.close()
 
 
-def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=False):
+def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=False,
+                                 decided=False):
     '''Rutina que permite realizar la gestión del registro de las simulaciones 
     realizadas. Se realiza el guardado los datos, corroboración de simulaciones
     ya existentes (preguntando si es que se quieren realizar nuevamente).
@@ -1281,7 +1331,7 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=
     Parameters
     ----------
     masked_func : bool, optional
-        Usar en True este bool solo para aplicar en la función "nmf_applied_masked_segments".
+        Usar en True solo para aplicar en la función "nmf_applied_masked_segments".
         Por defecto es False.
     
     Returns
@@ -1334,10 +1384,7 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=
                 
                 # Y se eliminan los labels para luego realizar una comparación
                 del dict_line['id']
-                
-                if masked_func:
-                    del dict_line['heart decision']
-                
+                                
                 # Y se comparan los parámetros utilizados
                 if dict_simulation == dict_line:
                     # Se agregan los valores al diccionario de la simulación
@@ -1376,8 +1423,13 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=
         return dict_simulation, True, True
         
     else:
-        # Decisión para seguir con la simulación
-        continue_dec =  _continue_dec(dict_simulation)
+        if decided:
+            # Si ya está decidido previamente (en get_HR_components), entonces simplemente 
+            # se continúa
+            continue_dec = True
+        else:
+            # Decisión para seguir con la simulación
+            continue_dec =  _continue_dec(dict_simulation)
         
         if not continue_dec:
             return dict_simulation, False, False
@@ -1385,115 +1437,20 @@ def _manage_registerdata_all_nmf(dict_simulation, filepath_to_save, masked_func=
             return dict_simulation, True, False
 
 
-def _manage_registerdata_segments_nmf(dict_simulation, assign_method, 
-                                      filepath_to_save, plot_segments):
-    '''Rutina que permite realizar la gestión del registro de las simulaciones 
-    realizadas. Se realiza el guardado los datos, corroboración de simulaciones
-    ya existentes (preguntando si es que se quieren realizar nuevamente) y 
-    creación de etiquetas para la señal simulada.
-    
-    Se asigna una etiqueta a cada señal nueva contando la cantidad de líneas 
-    utilizadas anteriormente. Es decir, el id corresponde al número de la línea
-    en el archivo.
-    
-    Destacar que esta sub rutina solo sirve para la función por segmentos. Además,
-    esta función no es la que realiza el guardado en este registro, se hace en la
-    misma función que la llama más adelante.
-    '''
-    # Definición previa de la selección de variables
-    comps_choice = None
-    heart_comp_labels = None
-    
-    # Definición del contador de líneas (que servirá como id de cada simulación)
-    id_count = 1
-    
-    # Se intenta porque puede ser que el archivo no esté creado
-    try:
-        # Se obtienen las componetes a partir de las etiquetas generadas
-        with open(f'{filepath_to_save}/Heart comp labels.txt', 'r', encoding='utf8') as data:
-            for line in data:
-                # Obtención del diccionario con el contexto
-                dict_line = literal_eval(line.strip())
-                
-                # Se obtienen los componentes tentativos
-                possible_comps = dict_line['heart_comp_labels']
-                possible_id = dict_line['id']
-                
-                # Y se eliminan los labels para luego realizar una comparación
-                del dict_line['heart_comp_labels']
-                del dict_line['id']
-                
-                # Y se comparan los parámetros utilizados
-                if dict_simulation == dict_line:
-                    # Si son iguales, se asigna la variable
-                    comps_choice = possible_comps
-                    
-                    # Y se agregan los valores al diccionario de la simulación
-                    dict_id = {'id': possible_id}
-                    
-                    #Concatenando
-                    dict_id.update(dict_simulation)
-                    dict_simulation = dict_id
-                    dict_simulation['heart_comp_labels'] = possible_comps
-                    break
-                
-                # Se aumenta el contador por cada línea leída
-                id_count += 1
-    
-    # En caso de que no exista
-    except:
-        # Definitivamente debe ingresarse manualmente
-        print('Advertencia (!): Debido a que es la primera vez que se crea el archivo, '
-              'el método debe ser manual (assign_method == "manual").\n')
-        assign_method = 'manual'
-    
-    # Método de trabajo
-    if assign_method == 'auto':
-        if comps_choice is None:
-            raise Exception('No existe una base de etiquetas para el archivo dado estos '
-                            'parámetros, por lo que la asignación automática no puede '
-                            'ser realizada (assign_method == "auto")\n')
-    
-    elif assign_method == 'manual':
-        if comps_choice is None:
-            # Si se usa el modo manual, se crea una lista que vaya guardando las etiquetas
-            heart_comp_labels = list()
-            # Y seleccionar modo plot por defecto
-            plot_segments = True
-            
-            # Se agrega la id definida al diccionario de simulación
-            dict_id = {'id': id_count}
-            
-            #Concatenando
-            dict_id.update(dict_simulation)
-            dict_simulation = dict_id
-            
-        else:
-            while True:
-                # Preguntar si es que se quiere hacer la simulación de nuevo en caso de que 
-                # ya exista
-                continue_decision = input('La simulación que quieres hacer ya fue realizada '
-                                          f'(en id: {dict_simulation["id"]}), '
-                                          '¿deseas hacerla nuevamente? [y/n]: ')
-                
-                if continue_decision == 'y':
-                    # Si se usa el modo manual, se crea una lista que vaya guardando las etiquetas
-                    heart_comp_labels = list()
-                    # Y seleccionar modo plot por defecto
-                    plot_segments = True
-                    break
-                
-                elif continue_decision == 'n':
-                    print('Función terminada.\n')
-                    exit()
-                    
-                print('Opción no válida.\n')
-    
-    return dict_simulation, comps_choice, heart_comp_labels, plot_segments, assign_method
-
-
 # Module testing
-filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - 1_Heart 1_Resp 0_White noise'
+filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - x - 1_Heart 1_Resp 0_White noise'
+get_components_HR_sounds(filepath, sep_type='masked segments', assign_method='auto',  
+                        n_components=2, N=2048, N_lax=0, N_fade=500, 
+                        noverlap=1024, padding=0, window='hann', whole=False, 
+                        alpha_wiener=1, wiener_filt=True, init='random', 
+                        solver='cd', beta=2, tol=1e-4, max_iter=200, 
+                        alpha_nmf=0, l1_ratio=0, random_state=0, 
+                        W_0=None, H_0=None, plot_segments=False)
+
+print()
+'''
+
+
 dir_file = f'{filepath}/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60].wav'
 nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=500,
                             noverlap=1024, padding=0,
@@ -1502,18 +1459,8 @@ nmf_applied_masked_segments(dir_file, n_components=2, N=2048, N_lax=0, N_fade=50
                             tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                             random_state=0, W_0=None, H_0=None, 
                             plot_segments=True)
-print()
-'''
 
 
-
-get_components_HR_sounds(filepath, sep_type='masked segments', assign_method='manual',  
-                        n_components=2, N=2048, N_lax=0, N_fade=500, 
-                        noverlap=1024, padding=0, window='hann', whole=False, 
-                        alpha_wiener=1, wiener_filt=True, init='random', 
-                        solver='cd', beta=2, tol=1e-4, max_iter=200, 
-                        alpha_nmf=0, l1_ratio=0, random_state=0, 
-                        W_0=None, H_0=None, plot_segments=False)
 nmf_applied_interest_segments(dir_file, assign_method='manual', n_components=2, 
                                 N=2048, N_lax=0, N_fade=500, noverlap=1024, padding=0,
                                 window='hamming', whole=False, alpha_wiener=1, 

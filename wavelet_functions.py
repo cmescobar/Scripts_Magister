@@ -205,7 +205,7 @@ def wavelet_packet_decomposition(signal_in, wavelet='db4', mode='periodization',
 
     return wavelets_out
 
-    
+
 def wavelet_packet_recomposition(signal_in, wavelet='db4', mode='periodization'):
     '''Esta función permite recomponer una señal de entrada en todos los
     posibles niveles de wavelet producto de la aplicación de la "Discrete
@@ -529,4 +529,125 @@ def zeropadding_to_pot2(signal_in):
     n = n2_pot + 1
     
     return np.append(signal_in, [0] * (2**n - len(signal_in)))
- 
+
+
+def plot_swt_levels(signal_in, wavelet='db4', start_level=0, end_level=5, show_opt='approx'):
+    # Selección de los coeficientes a mostrar
+    if show_opt == 'approx':
+        show = 0
+    elif show_opt == 'detalis':
+        show = 1
+    else:
+        raise Exception('Opción no soportada para "show_opt".')
+    
+    # Definición de la cantidad de puntos de la señal
+    N = signal_in.shape[0]
+    
+    # Cantidad de puntos deseados
+    points_desired = 2 ** int(np.ceil(np.log2(N)))
+    
+    # Paddeando para lograr el largo potencia de 2 que se necesita
+    audio_pad = np.pad(signal_in, 
+                       pad_width = (points_desired - N)//2, 
+                       constant_values=0)
+    
+    # Descomposición en Wavelets
+    coeffs = pywt.swt(audio_pad, wavelet=wavelet, level=end_level, 
+                      start_level=start_level)
+    
+    # Definición del arreglo de multiplicación
+    coef_mult = np.ones(len(coeffs[0][0]))
+    
+    # Plotteando
+    for i, coef in enumerate(coeffs_rev, 1):
+        plt.subplot(len(coeffs), 2, 2*i - 1)
+        plt.plot(coef[show])
+
+        plt.subplot(len(coeffs), 2, 2*i)
+        coef_mult *= coef[show]
+        plt.plot(coef_mult)
+    
+    plt.suptitle('Coeficientes y sus multiplicaciones respectivas')
+    plt.show()
+
+
+def wavelet_denoising(signal_in, wavelet='db4', mode='periodization', level=10,
+                      threshold_criteria='soft', threshold_delta='universal', 
+                      min_percentage=None, print_delta=False, log_base='e',
+                      plot_levels=False, delta=None):
+    # Obteniendo los coeficientes
+    wavelets = pywt.wavedecn(signal_in, wavelet=wavelet, mode=mode, level=level)
+    
+    # Definición de la lista donde se almacenan los wavelets thresholded
+    wav_thresh = list()
+
+    for i, wav in enumerate(wavelets):        
+        # Primer valor no se aplica threshold
+        if i == 0:
+            wav_now = to_append = wav
+        else:
+            # Se aplica threshold
+            wav_now = wavelet_thresholding(wav['d'], delta=delta, 
+                                           threshold_criteria=threshold_criteria,
+                                           threshold_delta=threshold_delta, 
+                                           min_percentage=min_percentage,
+                                           print_delta=print_delta, log_base=log_base)
+            # Se define el diccionario para añadir
+            to_append = {'d': wav_now}
+        
+        if plot_levels:
+            plt.subplot(level+1, 1, level+1 - i)
+            plt.plot(wav_now)
+            
+        # Para reconstruir
+        wav_thresh.append(to_append)
+    
+    # Graficar
+    if plot_levels:
+        plt.show()
+    
+    # Y reconstruyendo
+    signal_denoised = pywt.waverecn(wav_thresh, wavelet=wavelet, mode=mode, axes=None)
+    
+    return signal_denoised
+
+
+def wavelet_denoising_my(signal_in, wavelet='db4', mode='periodization', level=10,
+                         threshold_criteria='soft', threshold_delta='universal', 
+                         min_percentage=None, print_delta=False, log_base='e',
+                         plot_levels=False, delta=None):
+    # Obteniendo los coeficientes
+    wavelets = dwt_decomposition(signal_in, wavelet=wavelet, mode=mode,
+                                 levels=level, return_concatenated=False)
+    
+    # Definición de la lista donde se almacenan los wavelets thresholded
+    wav_thresh = list()
+    
+    for i, wav in enumerate(wavelets):        
+        # Primer valor no se aplica threshold
+        if i >= level:
+            wav_now = wav
+        else:
+            # Se aplica threshold
+            wav_now = wavelet_thresholding(wav, delta=delta, 
+                                           threshold_criteria=threshold_criteria,
+                                           threshold_delta=threshold_delta, 
+                                           min_percentage=min_percentage,
+                                           print_delta=print_delta, log_base=log_base)
+        
+        if plot_levels:
+            plt.subplot(level+1, 1, level+1 - i)
+            plt.plot(wav_now)
+            
+        # Para reconstruir
+        wav_thresh.append(wav_now)
+    
+    # Graficar
+    if plot_levels:
+        plt.show()
+    
+    # Y reconstruyendo
+    signal_denoised = dwt_recomposition(wav_thresh, wavelet=wavelet, mode=mode,
+                                        levels=level, is_concatenated=False)
+    
+    return signal_denoised

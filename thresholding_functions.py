@@ -1,5 +1,6 @@
 import numpy as np
 import cvxpy as cp
+import pywt
 
 
 def Sure_Shrink(signal_in, solve_method='iterations', step=0.001):
@@ -84,7 +85,7 @@ def Sure_Shrink(signal_in, solve_method='iterations', step=0.001):
 
 def wavelet_thresholding(signal_in, delta=None, threshold_criteria='soft',
                          threshold_delta='mad', min_percentage=None,
-                         print_delta=False):
+                         print_delta=False, log_base='e'):
     '''Definición de los tipos de thresholding aplicados a una función transformada
     al dominio wavelet.
     
@@ -114,20 +115,10 @@ def wavelet_thresholding(signal_in, delta=None, threshold_criteria='soft',
     # Definición del umbral de corte
     if delta is None:
         if threshold_delta == 'mad':
-            # Se calcula la mediana
-            med = np.median(signal_in)
-            # Y se obtiene el sigma usando la median absolute deviation (MAD)
-            sigma = np.median(abs(signal_in - med)) / 0.6745
-            # Luego delta está dado por
-            delta = sigma * np.sqrt(2 * np.log(len(signal_in)))
+            delta = mad_thresholding(signal_in, log_base=log_base)
         
         elif threshold_delta == 'universal':
-            # Se calcula la mediana de la magnitud
-            med = np.median(abs(signal_in))
-            # Estimación del sigma
-            sigma = med / 0.6745
-            # Luego el delta está dado por
-            delta = sigma * np.sqrt(2 * np.log(len(signal_in)))
+            delta = universal_thresholding(signal_in, log_base=log_base)
         
         elif threshold_delta == 'sureshrink':
             delta = Sure_Shrink(signal_in, solve_method='iterations', 
@@ -139,16 +130,49 @@ def wavelet_thresholding(signal_in, delta=None, threshold_criteria='soft',
     if print_delta:
         print(delta)
 
-    # Opciones de corte para el umbral
-    if threshold_criteria == 'hard':
-        return np.array([i if abs(i) > delta else 0 for i in signal_in])
+    return pywt.threshold(signal_in, value=delta, 
+                          mode=threshold_criteria, 
+                          substitute=0)
+
+
+def mad_thresholding(signal_in, log_base='e'):
+    # Se calcula la mediana
+    med = np.median(signal_in)
+    # Y se obtiene el sigma usando la median absolute deviation (MAD)
+    sigma = np.median(abs(signal_in - med)) / 0.6745
     
-    elif threshold_criteria == 'soft':
-        # Definición de la operación soft
-        soft_operator = lambda x: max(0, 1 - delta/abs(x + 1e-15)) * x
-        return np.array([soft_operator(i) for i in signal_in])
+    # Luego delta está dado por
+    if log_base == 'e':
+        delta = sigma * np.sqrt(2 * np.log(len(signal_in)))
+    elif log_base == 2:
+        delta = sigma * np.sqrt(2 * np.log2(len(signal_in)))
+    elif log_base == 10:
+        delta = sigma * np.sqrt(2 * np.log10(len(signal_in)))
+    else:
+        raise Exception('log_base no especificado correctamente.')
+        
+    return delta
+
+
+def universal_thresholding(signal_in, log_base='e'):
+    # Se calcula la mediana de la magnitud
+    med = np.median(abs(signal_in))
+    # Estimación del sigma
+    sigma = med / 0.6745
     
-    
+    # Luego delta está dado por
+    if log_base == 'e':
+        delta = sigma * np.sqrt(2 * np.log(len(signal_in)))
+    elif log_base == 2:
+        delta = sigma * np.sqrt(2 * np.log2(len(signal_in)))
+    elif log_base == 10:
+        delta = sigma * np.sqrt(2 * np.log10(len(signal_in)))
+    else:
+        raise Exception('log_base no especificado correctamente.')
+        
+    return delta
+
+
 def thresholding_processing(signal_in):
     '''Proceso que permite separar las envolventes de los murmullos del primer
     sonido cardíaco (S1) que no fueron totalmente removidos por ALPF

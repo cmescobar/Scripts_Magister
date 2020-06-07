@@ -101,7 +101,7 @@ def filt_and_correct_group_delay(signal_in, gd, gd_padding, num, den):
 
     return signal_to_filt, signal_filtered
 
-    
+
 def lowpass_cut_frequency(signal_in, samplerate, freq_stop,
                           signal_ref=None):
     '''Función de filtro pasa bajos que corta en una frecuencia 
@@ -236,8 +236,8 @@ def fir_filter_adapted(freq_pass, freq_stop, samplerate, gpass=1,
     Referencias:
     [1] Digital Signal Processing: Principles, Algorithms, and 
         Applications by J. G. Proakis and D. G. Manolakis.
-    [2] Página CCRMA de Julius O. Smith III, disponible en:
-        https://ccrma.stanford.edu/~jos/
+    [2] Julius O. Smith III. INTRODUCTION TO DIGITAL FILTERS 
+    	Disponible en: https://ccrma.stanford.edu/~jos/filters/
     '''
     # Definición de los ripples en escala absoluta [1]
     delta_p = (10**(gpass/20) - 1)/(10**(gpass/20) + 1)
@@ -660,8 +660,8 @@ def upsampling_signal(signal_in, samplerate, new_samplerate,
         return signal_out / max(abs(signal_out))
     else:
         return signal_out
-    
-    
+
+
 def resampling_by_points(signal_in, samplerate, N_desired, trans_width=50,
                          resample_method='interp1d', lp_method='fir', fir_method='kaiser', 
                          gpass=1, gstop=80, correct_by_gd=True, gd_padding='periodic',
@@ -906,7 +906,7 @@ def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
     else:
         return (gd, num, den), signal_filtered
 
-    
+
 def highpass_by_complement_lowpass_filter(signal_in, samplerate, freq_stop, freq_pass,
                                           lp_process='manual_time_design', 
                                           fir_method='kaiser', gpass=1, gstop=80, 
@@ -1067,8 +1067,8 @@ def highpass_by_complement_lowpass_filter(signal_in, samplerate, freq_stop, freq
         return info, signal_filtered / max(abs(signal_filtered))
     else:
         return info, signal_filtered
-        
-    
+
+
 def highpass_filter(signal_in, samplerate, freq_stop, freq_pass,
                     method='fir', lp_process='manual_time_design',
                     fir_method='kaiser', gpass=1, gstop=80, 
@@ -1237,8 +1237,8 @@ def highpass_filter(signal_in, samplerate, freq_stop, freq_pass,
         return (gd, num, den), signal_filtered / max(abs(signal_filtered))
     else:
         return (gd, num, den), signal_filtered
-    
-    
+
+
 def bandpass_filter(signal_in, samplerate, freq_stop_1, freq_pass_1, 
                     freq_pass_2, freq_stop_2, bp_method='sequence', 
                     lp_method='fir', hp_method='fir', 

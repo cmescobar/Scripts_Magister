@@ -9,69 +9,69 @@ from sklearn.decomposition import NMF
 
 
 # Descriptores temporales
-def centroide(audio):
-    return sum([i*abs(audio[i]) for i in range(len(audio))]) / sum(abs(audio))
+def centroide(signal_in):
+    return sum([i*abs(signal_in[i]) for i in range(len(signal_in))]) / sum(abs(signal_in))
 
 
-def promedio_aritmetico(audio):
-    return sum(audio) / len(audio)
+def promedio_aritmetico(signal_in):
+    return sum(signal_in) / len(signal_in)
 
 
-def varianza(audio):
-    return sum((audio - promedio_aritmetico(audio)) ** 2) / len(audio)
+def varianza(signal_in):
+    return sum((signal_in - promedio_aritmetico(signal_in)) ** 2) / len(signal_in)
 
 
-def skewness(audio):
-    return sum((audio - promedio_aritmetico(audio)) ** 3) / \
-           (len(audio) * varianza(audio) ** (3 / 2))
+def skewness(signal_in):
+    return sum((signal_in - promedio_aritmetico(signal_in)) ** 3) / \
+           (len(signal_in) * varianza(signal_in) ** (3 / 2))
 
 
-def kurtosis(audio):
-    return sum((audio - promedio_aritmetico(audio)) ** 4) / \
-           (len(audio) * varianza(audio) ** 2) - 3
+def kurtosis(signal_in):
+    return sum((signal_in - promedio_aritmetico(signal_in)) ** 4) / \
+           (len(signal_in) * varianza(signal_in) ** 2) - 3
 
 
-def rms(audio):
-    return np.sqrt(sum(audio ** 2) / len(audio))
+def rms(signal_in):
+    return np.sqrt(sum(signal_in ** 2) / len(signal_in))
 
 
-def max_amp(audio):
-    return max(abs(audio))
+def max_amp(signal_in):
+    return max(abs(signal_in))
 
 
-def zero_cross_rate(audio):
-    return sum([abs(np.sign(audio[i]) - np.sign(audio[i + 1]))
-                for i in range(len(audio) - 1)]) / (2 * len(audio))
+def zero_cross_rate(signal_in):
+    return sum([abs(np.sign(signal_in[i]) - np.sign(signal_in[i + 1]))
+                for i in range(len(signal_in) - 1)]) / (2 * len(signal_in))
 
 
 # Descriptores frecuenciales
-def pendiente_espectral(audio):
+def pendiente_espectral(signal_in):
     # Aplicando fft
-    fft_audio = np.fft.fft(audio)
+    fft_signal_in = np.fft.fft(signal_in)
     # Definición de kappa
-    K = len(fft_audio)
+    K = len(fft_signal_in)
     # Luego realizando el cálculo del flujo espectral
-    a = sum([i * abs(fft_audio[i]) for i in range(round(K / 2))])
+    a = sum([i * abs(fft_signal_in[i]) for i in range(round(K / 2))])
     b = sum([i for i in range(round(K / 2))]) * \
-        sum([abs(fft_audio[i]) for i in range(round(K / 2))])
+        sum([abs(fft_signal_in[i]) for i in range(round(K / 2))])
     c = sum([i ** 2 for i in range(round(K / 2))])
     d = sum([i for i in range(round(K / 2))])
     return (K/2*a - b) / (K/2*c - d**2)
 
 
-def centroide_espectral(audio):
+def centroide_espectral(signal_in):
     # Aplicando fft
-    fft_audio = np.fft.fft(audio)
+    fft_signal_in = np.fft.fft(signal_in)
     # Luego se hace el calculo del centroide
-    return sum([i * abs(fft_audio[i])**2
-                for i in range(round(len(fft_audio) / 2))]) / \
-           sum(abs(fft_audio) ** 2)
+    return sum([i * abs(fft_signal_in[i])**2
+                for i in range(round(len(fft_signal_in) / 2))]) / \
+           sum(abs(fft_signal_in) ** 2)
 
 
-def flujo_espectral(audio, audio_before):
+def flujo_espectral(signal_in, signal_in_before):
     # Aplicando fft
-    fft_1 = np.fft.fft(audio)
-    fft_2 = np.fft.fft(audio_before)
+    fft_1 = np.fft.fft(signal_in)
+    fft_2 = np.fft.fft(signal_in_before)
     # Definición de kappa
     K = len(fft_1)
     # Luego realizando el cálculo del flujo espectral
@@ -79,29 +79,29 @@ def flujo_espectral(audio, audio_before):
                         for i in range(round(K / 2))])) / (K / 2)
 
 
-def spectral_flatness(audio):
+def spectral_flatness(signal_in):
     # Aplicando fft
-    fft_audio = np.fft.fft(audio)
+    fft_signal_in = np.fft.fft(signal_in)
     # Definición de kappa
-    K = round(len(fft_audio)/2)
+    K = round(len(fft_signal_in)/2)
     # Luego realizando el cálculo de la planitud espectral
-    return np.exp(1 / K * sum([np.log(abs(fft_audio[i])) for i in range(K)])) /\
-           (1 / K * sum([abs(fft_audio[i]) for i in range(K)]))
+    return np.exp(1 / K * sum([np.log(abs(fft_signal_in[i])) for i in range(K)])) /\
+           (1 / K * sum([abs(fft_signal_in[i]) for i in range(K)]))
 
 
-def abs_fourier_shift(audio, samplerate, N_rep):
-    audio_rep = np.tile(audio, N_rep)
-    fourier = np.fft.fft(audio_rep)
-    frec = np.fft.fftfreq(len(audio_rep), 1/samplerate)
+def abs_fourier_shift(signal_in, samplerate, N_rep):
+    signal_in_rep = np.tile(signal_in, N_rep)
+    fourier = np.fft.fft(signal_in_rep)
+    frec = np.fft.fftfreq(len(signal_in_rep), 1/samplerate)
     fourier_shift = abs(fourier)
     return frec, fourier_shift
 
 
-def abs_fourier_db_half(audio, samplerate, N_rep):
-    audio_rep = np.tile(audio, N_rep)
-    fourier = 20 * np.log10(abs(np.fft.fft(audio_rep)) + 1e-12)
-    frec = np.fft.fftfreq(len(audio_rep), 1 / samplerate)
-    return frec[:len(audio) // 2], fourier[:len(audio)//2] 
+def abs_fourier_db_half(signal_in, samplerate, N_rep):
+    signal_in_rep = np.tile(signal_in, N_rep)
+    fourier = 20 * np.log10(abs(np.fft.fft(signal_in_rep)) + 1e-12)
+    frec = np.fft.fftfreq(len(signal_in_rep), 1 / samplerate)
+    return frec[:len(signal_in) // 2], fourier[:len(signal_in)//2] 
 
 
 def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0, 
@@ -488,3 +488,28 @@ def apply_function_to_audio(func, audio, samplerate, separation=1024,
         audio_before = audio_frame
 
     return time_list, out
+
+
+# Test module
+'''normal = lambda mu, sigma, x:  1/(sigma * np.sqrt(2 * np.pi)) * \
+    np.exp( - (x - mu)**2 / (2 * sigma**2))
+
+s1 = 10
+u1 = 7
+
+s2 = 15
+u2 = 15
+
+x = np.linspace(-35,25,1000)
+
+n1 = normal(u1, s1, x)
+n2 = normal(u2, s2, x)
+
+print(centroide(n1))
+print(centroide(n2))
+
+plt.plot(n1)
+plt.plot(n2)
+plt.axvline(centroide(n1), ymin=-1, color='b')
+plt.axvline(centroide(n2), ymin=-1, color='r')
+plt.show()'''

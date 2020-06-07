@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial import distance
 
 
 def hamming_window(N):
@@ -103,17 +104,39 @@ def recognize_peaks_by_derivates(x, signal, peak_type='min', tol_dx=0.01,
     return out_indexes
 
 
-def wiener_filter(V, WiHi, W, H, alpha=1):
-    # El filtro de Wiener permite generar una máscara que obtenga información
-    # del espectrograma original a partir de la proporción obtenida mediante la
-    # multiplicación de las matrices W y H (estimación de la señal original)
+def wiener_filter(X, WiHi, W, H, alpha=1, div_basys=1e-15):
+    '''Aplicación de filtro de Wiener para las componentes obtenidas a 
+    partir de la descomposición NMF. Está dada por:
+    M_i = (WiHi) ** a / (sum_{i} (WiHi) ** a)
     
+    Parameters
+    ----------
+    X : ndarray
+        Señal a descomponer mediante NMF.
+    WiHi : ndarray
+        Componente i de la descomposición NMF.
+    W : ndarray
+        Matriz que contiene la información espectral de las componentes.
+    H : ndarray
+        Matriz que contiene la información temporal de las componentes.
+    alpha : int, optional
+        Exponente utilizado para cada componente. Por defecto es 1.
+    div_basys : float, optional
+        Valor base utilizado en la división (para evitar división por cero).
+        Por defecto es 1e-15.
+    '''
+    # Definición del WH
+    WH_alpha = np.zeros(X.shape)
+    
+    for i in range(W.shape[1]):
+        WH_alpha += np.outer(W[:,i], H[i]) ** alpha
+        
     # Obteniendo la máscara
-    mask = np.divide(WiHi ** alpha, np.matmul(W, H) + 1e-15)
+    mask = np.divide(WiHi ** alpha, WH_alpha + div_basys)
     
     # Aplicando la máscara al espectrograma original, se obtiene el resultado
     # final del proceso de separación de fuentes
-    return mask * V
+    return mask * X
 
 
 def SNR(signal_in, signal_denoised, snr_type='db'):
@@ -229,7 +252,6 @@ def raised_cosine_fading(N, beta, side='right'):
     return vanish_window
 
 
-
 def db_coef(db):
     '''Función que obitene el coeficiente por el cual se debe multiplicar un arreglo
     para obtener el valor de decibel deseado (relativo).
@@ -264,3 +286,55 @@ def db_attenuation(signal_in, db):
         Señal atenuada en db dB.
     '''
     return signal_in * db_coef(-db)
+
+
+def correlation(a, b):
+    '''Función de correlación entre 2 series temporales.
+    
+    Parameters
+    ----------
+    a , b : ndarray
+        Series de entrada.
+    
+    Returns
+    -------
+    r : float
+        Correlación entre las 2 entradas, dadas por:
+        1 / (N - 1) * np.sum((a - mu_a) * (b - mu_b)) / (sig_a * sig_b)
+        
+    Referencias
+    -----------
+    [1] https://en.wikipedia.org/wiki/Correlation_and_dependence
+    '''
+    # Definición de la cantidad de puntos
+    N = len(a)
+    
+    # Cálculo de la media de ambas series
+    mu_a = np.mean(a)
+    mu_b = np.mean(b)
+    
+    # Cálculo de la desviación estándar de ambas series
+    sig_a = np.std(a)
+    sig_b = np.std(b)
+    
+    # Definición de correlación
+    r =  1 / (N - 1) * np.sum((a - mu_a) * (b - mu_b)) / (sig_a * sig_b)
+    
+    # Propiedad de límite para r    
+    return r if r <= 1.0 else 1.0
+
+
+def cosine_similarity(a, b):
+    '''Similaridad de coseno, basada en la función de Scipy distancia de coseno.
+    
+    Parameters
+    ----------
+    a , b : array_like
+        Entradas para el cálculo de la similaridad coseno.
+    
+    Returns
+    -------
+    cosine_similarity : float
+        Similaridad de coseno.
+    '''
+    return 1 - distance.cosine(a, b)

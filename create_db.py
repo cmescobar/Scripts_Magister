@@ -6,7 +6,8 @@ from tqdm import tqdm
 from itertools import product
 from matplotlib.lines import Line2D
 from math_functions import raised_cosine_modified, db_attenuation
-from filter_and_sampling import resampling_by_points
+from filter_and_sampling import resampling_by_points, downsampling_signal, upsampling_signal
+from source_separation import nmf_decomposition
 
 
 def create_visual_lookups(N_periods, lens_sig, lens_sil):
@@ -753,15 +754,92 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs',
         sf.write(f'{dir_to_resp_adapted}/{comb[0]}', resp_to_sum, samplerate=44100)
 
 
+def generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512, noverlap=1024, 
+                          iter_prom=1, padding=0, window='hann', whole=False, alpha_wiener=1,  
+                          filter_out='wiener', init='random', solver='cd', beta=2,
+                          tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                          random_state=0, W_0=None, H_0=None, same_outshape=True,
+                          scale='abs', db_basys=1e-15):
+    # Lista de sonidos en el directorio ingresado
+    sounds = os.listdir(filepath)
+    
+    # Definición del arreglo donde se almacenará la información
+    W_list = np.empty((0, N//2 + 1))
+    
+    for sound in tqdm(sounds, desc='Dictionary', ncols=80):
+        # Se abre el archivo cardíaco
+        audio, samplerate = sf.read(f'{filepath}/{sound}')
+        
+        if samplerate > samplerate_des:
+            sr_in, audio_in = downsampling_signal(audio, samplerate, 
+                                                  freq_pass=samplerate_des//2 - 100, 
+                                                  freq_stop=samplerate_des//2, 
+                                                  method='lowpass', lp_method='fir',
+                                                  resample_method='interp1d',
+                                                  fir_method='kaiser', gpass=1, gstop=80,
+                                                  correct_by_gd=True, gd_padding='periodic',
+                                                  plot_filter=False, normalize=True)
+        
+        elif samplerate < samplerate_des:
+            sr_in, audio_in = upsampling_signal(audio, samplerate, samplerate_des,
+                                                N_desired=None, resample_method='interp1d',
+                                                stret_method='lowpass', lp_method='fir', 
+                                                fir_method='kaiser', trans_width=100, 
+                                                gpass=1, gstop=80, 
+                                                correct_by_gd=True, gd_padding='periodic',
+                                                plot_filter=False, plot_signals=False,
+                                                normalize=True)
+        
+        else:
+            print("Paso")
+            sr_in, audio_in = samplerate, audio
+        
+        # Se aplica NMF
+        _, _, _, W, _ = nmf_decomposition(audio_in, sr_in, n_components=n_components, 
+                                          N=N, noverlap=noverlap, iter_prom=iter_prom, 
+                                          padding=padding, window=window, whole=whole, 
+                                          alpha_wiener=alpha_wiener, filter_out=filter_out, 
+                                          init=init, solver=solver, beta=beta, tol=tol, 
+                                          max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                          l1_ratio=l1_ratio, random_state=random_state, 
+                                          W_0=W_0, H_0=H_0, same_outshape=same_outshape,
+                                          plot_spectrogram=False, scale=scale, 
+                                          db_basys=db_basys)
+        
+        W_list = np.vstack((W_list, W.T))
+    
+    # Definición del directorio a guardar
+    filepath_to_save = f'{filepath}/SR {samplerate_des}'
+    
+    # Corroborar la existencia de la carpeta. Si no, crear una
+    if not os.path.isdir(f'{filepath_to_save}'):
+        os.makedirs(f'{filepath_to_save}')
+    
+    # Definición del nombre del archivo
+    filename = f'{filepath_to_save}/W_dict_comps{n_components}_N{N}.npz'
+    
+    # Guardar la lista en un archivo .npz    
+    np.savez(filename, W_list=W_list)
+    
+    return W_list
+
 
 # Módulo de testeo
+filepath = 'Heart component dictionaries/normal_a'
+generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512, noverlap=1024, 
+                      iter_prom=1, padding=0, window='hann', whole=False, alpha_wiener=1,  
+                      filter_out='wiener', init='random', solver='cd', beta=2,
+                      tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
+                      random_state=0, W_0=None, H_0=None, same_outshape=True,
+                      scale='abs', db_basys=1e-15)
 
+
+'''
 # Opciones de panel
 dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
 get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp=1, 
                              a_noise=0, seed=0)
 
-'''
 filepath = 'Database_manufacturing/db_heart'
 s1_sel = 59
 s2_sel = 60

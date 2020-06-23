@@ -2219,10 +2219,10 @@ def _no_masking(signal_in, W, H, S, k, N, noverlap, window, whole, scale, same_o
 
 
 # Module testing
-filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - x - 1_Heart 1_Resp 0_White noise'
+#filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - x - 1_Heart 1_Resp 0_White noise'
 
-comparison_components_nmf_ground_truth(filepath, id_rev=1, sep_type='masked segments', 
-                                       plot_signals=True, plot_show=False)
+#comparison_components_nmf_ground_truth(filepath, id_rev=1, sep_type='masked segments', 
+#                                       plot_signals=True, plot_show=False)
 
 
 '''

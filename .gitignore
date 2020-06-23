@@ -30,3 +30,10 @@ Wavelets_tests/*.wav
 
 # Archivos generados en db_HR
 Database_manufacturing/db_HR
+
+# Archivos generados en Heart component dictionaries
+Heart component dictionaries/SR*
+Heart component dictionaries/normal*
+
+# Archivos usados en Source separation tests
+Source separation tests/db_dict

@@ -321,20 +321,59 @@ def correlation(a, b):
     r =  1 / (N - 1) * np.sum((a - mu_a) * (b - mu_b)) / (sig_a * sig_b)
     
     # Propiedad de límite para r    
-    return r if r <= 1.0 else 1.0
+    r = r if r <= 1.0 else 1.0
+    r = r if r >= -1.0 else -1.0
+
+    return r
 
 
 def cosine_similarity(a, b):
-    '''Similaridad de coseno, basada en la función de Scipy distancia de coseno.
+    '''Similitud coseno entre un vector a y b.
     
     Parameters
     ----------
-    a , b : array_like
-        Entradas para el cálculo de la similaridad coseno.
+    a, b : array_shape
+        Entradas a comparar.
     
     Returns
     -------
-    cosine_similarity : float
-        Similaridad de coseno.
+    cos_sim : float
+        Similitud de coseno.
+    
+    References
+    ----------
+    [1] https://en.wikipedia.org/wiki/Cosine_similarity
+    [2] https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/
+        scipy.spatial.distance.cosine.html
     '''
     return 1 - distance.cosine(a, b)
+
+
+def cosine_similarities(A, b):
+    '''Similitud coseno entre un vector A y b. En este caso A puede
+    ser una matriz de dimensión (n x m) y b siempre es de dimensión
+    m. Si A es una matriz, se retorna un arreglo de dimensión n 
+    (similitud de coseno entre b y cada una de las filas de A).
+    
+    Parameters
+    ----------
+    a, b : array_shape
+        Entradas a comparar.
+    
+    Returns
+    -------
+    cos_sim : ndarray or float
+        Similitud de coseno.
+    
+    References
+    ----------
+    [1] https://en.wikipedia.org/wiki/Cosine_similarity
+    '''
+    norm_a = np.sqrt(np.sum(A ** 2, axis=1))
+    norm_b = np.sqrt(np.sum(b ** 2))
+    
+    # Definición del numerador
+    num = np.sum((A * b), axis=1)
+    den = norm_a * norm_b
+    
+    return num / den 

@@ -32,8 +32,9 @@ Wavelets_tests/*.wav
 Database_manufacturing/db_HR
 
 # Archivos generados en Heart component dictionaries
-Heart component dictionaries/SR*
 Heart component dictionaries/normal*
+Heart component dictionaries/abs scale decomposition*
+Heart component dictionaries/dB scale decomposition*
 
 # Archivos usados en Source separation tests
 Source separation tests/db_dict

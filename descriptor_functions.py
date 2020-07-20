@@ -104,15 +104,52 @@ def abs_fourier_db_half(signal_in, samplerate, N_rep):
     return frec[:len(signal_in) // 2], fourier[:len(signal_in)//2] 
 
 
-def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0, 
+def get_spectrogram(signal_in, samplerate, N=512, padding=0, repeat=0, noverlap=0, 
                     window='tukey', whole=False):
+    '''Función que permite obtener la STFT de una señal.
+    
+    Parameters
+    ----------
+    signal_in : ndarray
+        Señal de entrada a transformar.
+    samplerate : int
+        Tasa de muestreo de la señal de entrada.
+    N : int, optional
+        Cantidad de puntos a utilizar por ventana. Por defecto es 512.
+    padding : int, optional
+        Cantidad de puntos de zero padding al final de la señal. Por defecto es 0.
+    repeat : int, optional
+        Cantidad de veces que se repite la señal en el cálculo de la STFT. Por defecto es 0.
+    noverlap : int, optional
+        Cantidad de puntos de traslape que se utiliza para calcular la STFT. Por defecto
+        es 0.
+    window : {'tukey', 'hamming', 'hann', 'nuttall'}, None, optional
+        Ventana a utilizar para el cálculo de la STFT. Por defecto es 'tukey'. Con None se
+        aplica ventana rectangular.
+    whole : bool, optional
+        Indica si se calcula la STFT hasta samplerate (True) o hasta samplerate // 2 (False).
+        Por defecto es False.
+        
+    Returns
+    -------
+    t : ndarray
+        Arreglo que indica las etiquetas temporales de la matriz que representa la STFT.
+    f : ndarray
+        Arreglo que indica las etiquetas frecuenciales de la matriz que representa la STFT.
+    S : ndarray
+        Espectrograma calculado a partir de la STFT de la señal de entrada.
+    '''
+    
     # Corroboración de criterios: noverlap <= N - 1
     if N <= noverlap:
         raise Exception('noverlap debe ser menor que N.')
     elif noverlap < 0:
-        raise Exception('noverlap no puede ser negativo')
+        raise Excepetion('noverlap no puede ser negativo')
     else:
         noverlap = int(noverlap)
+        
+    # Propiedad de repeat
+    repeat = int(repeat) if repeat >= 0 else 0
     
     # Lista donde se almacenará los valores del espectrograma
     to_fft = []
@@ -182,8 +219,13 @@ def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0,
     # Ventaneando
     signal_wind = np.array(to_fft) * wind_mask
 
+    # Repetición de la señal
+    if repeat > 0:
+        signal_wind = np.pad(signal_wind, pad_width=((0,0), (repeat * N // 2, repeat * N // 2)),
+                             mode='reflect')
+    
     # Aplicando padding
-    zeros = np.zeros((signal_wind.shape[0], padding), dtype=signal_wind.dtype)    
+    zeros = np.zeros((signal_wind.shape[0], padding), dtype=signal_wind.dtype)
     signal_padded = np.concatenate((signal_wind, zeros), axis=1)
 
     # Aplicando transformada de fourier
@@ -193,16 +235,17 @@ def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0,
     # que está reflejado hermitianamente)
     if whole:
         # Generar el vector de frecuencias para cada ventana
-        freqs = np.linspace(0, samplerate, N+padding)
+        freqs = np.linspace(0, samplerate, N + padding + repeat * 2 * (N // 2))
 
         # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
         spect = np.array(spect, dtype=np.complex128)
     else:
         # Generar el vector de frecuencias para cada ventana
-        freqs = np.linspace(0, samplerate//2, (N+padding)//2 + 1)
+        freqs = np.linspace(0, samplerate//2, ( N + padding + repeat * 2 * (N // 2))//2 + 1)
 
         # Una vez obtenido el spect_mag y spect_pha, se pasa a matriz
-        spect = np.array(spect, dtype=np.complex128)[:, :(N+padding)//2 + 1]
+        spect = np.array(spect, 
+                         dtype=np.complex128)[:, :(N + padding + repeat * 2 * (N // 2))//2 + 1]
 
     # Escalando
     spect *= np.sqrt(1 / (N * np.sum(wind_mask ** 2)))
@@ -212,7 +255,36 @@ def get_spectrogram(signal_in, samplerate, N=512, padding=0, noverlap=0,
     return times, freqs, spect.T
 
 
-def get_inverse_spectrogram(X, N=0, noverlap=0, window='tukey', whole=False):
+def get_inverse_spectrogram(X, N=None, padding=0, repeat=0, noverlap=0, window='tukey', 
+                            whole=False):
+    '''Función que permite obtener la ISTFT de un espectrograma.
+    
+    Parameters
+    ----------
+    X : ndarray
+        Espectrograma a aplicar la ISTFT
+    N : int, optional
+        Cantidad de puntos a utilizar por ventana. Por defecto es None, con lo cual
+        se asume que el N es la dimensión fila de X.
+    padding : int, optional
+        Cantidad de puntos de padding al final de la señal. Por defecto es 0.
+    repeat : int, optional
+        Cantidad de veces que se repite la señal en el cálculo de la STFT. Por defecto es 0.
+    noverlap : int, optional
+        Cantidad de puntos de traslape que se utiliza para calcular la STFT. Por defecto
+        es 0.
+    window : {'tukey', 'hamming', 'hann', 'nuttall'}, None, optional
+        Ventana a utilizar para el cálculo de la STFT. Por defecto es 'tukey'. Con None se
+        aplica ventana rectangular.
+    whole : bool, optional
+        Indica si se calcula la STFT hasta samplerate (True) o hasta samplerate // 2 (False).
+        Por defecto es False.
+        
+    Returns
+    -------
+    s_out : ndarray
+        Señal en el tiempo de correspondiente a la ISTFT de X.
+    '''
     # Preguntar si es que la señal está en el rango 0-samplerate. En caso de 
     # que no sea así, se debe concatenar el conjugado de la señal para 
     # recuperar el espectro. Esto se hace así debido a la propiedad de las 
@@ -222,6 +294,10 @@ def get_inverse_spectrogram(X, N=0, noverlap=0, window='tukey', whole=False):
     # debiera ser la misma pero conjugada, para que al transformar esta señal 
     # hermitiana mediante la IFT, se recupere una señal real (correspondiente a 
     # la señal de audio).
+    
+    # Propiedad de padding y repeat
+    padding = int(padding) if padding > 0 else 0
+    repeat = int(repeat) if repeat > 0 else 0
     
     if not whole:
         # Se refleja lo existente utilizando el conjugado
@@ -237,7 +313,7 @@ def get_inverse_spectrogram(X, N=0, noverlap=0, window='tukey', whole=False):
         noverlap = int(noverlap)
     
     # Definición de N dependiendo de la naturaleza de la situación
-    if N == 0 or N > rows:
+    if N is None or N > rows:
         N = rows
     
     # Si el norverlap es 0, se hacen ventanas 2 muestras más grandes 
@@ -265,8 +341,13 @@ def get_inverse_spectrogram(X, N=0, noverlap=0, window='tukey', whole=False):
     # Destransformando y re escalando se obtiene
     ifft_scaled = np.fft.ifft(X, axis=0) * np.sqrt(N * np.sum(wind_mask ** 2))
     
-    # Si N es menor que la dimensión de filas, significa que está padeada
-    ifft_scaled = ifft_scaled[:N,:] 
+    # Retirando el padding
+    if padding > 0:
+        # Se corta el padding
+        ifft_scaled = ifft_scaled[:-padding,:]
+    
+    if repeat > 0:
+        ifft_scaled = ifft_scaled[repeat*N//2:-repeat*N//2,:] 
     
     # A partir del overlap, el tamaño de cada ventana de la fft (dimensión fila)
     # y la cantidad de frames a las que se les aplicó la transformación 

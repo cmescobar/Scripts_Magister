@@ -826,6 +826,14 @@ def generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512,
 
 # Módulo de testeo
 filepath = 'Heart component dictionaries/normal_a'
+
+
+dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
+get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=0.2, a_resp=0.8, 
+                             a_noise=0, seed=0)
+
+
+'''
 generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512, noverlap=1024, 
                       iter_prom=1, padding=0, window='hann', whole=False, alpha_wiener=1,  
                       filter_out='wiener', init='random', solver='cd', beta=2,
@@ -833,8 +841,6 @@ generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512, nov
                       random_state=0, W_0=None, H_0=None, same_outshape=True,
                       scale='abs', db_basys=1e-15)
 
-
-'''
 # Opciones de panel
 dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations'
 get_heart_respiratory_sounds(dir_to_heart, db_option='SS', a_heart=1, a_resp=1, 

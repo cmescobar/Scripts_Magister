@@ -309,7 +309,7 @@ def clustering_test(W, H, samplerate_original, samplerate_signal, N, N_audio, no
     -----------
     [1] Canadas-Quesada, et. al (2017). A non-negative matrix factorization 
         approach  based on spectro-temporal clustering to extract heart sounds. 
-        Applied Acoustics. Elsevier. Chapter 3.2.    
+        Applied Acoustics. Elsevier. Chapter 3.2.
     '''
     # Bools para criterio espectral
     bool_spectral = spectral_correlation_test(W=W, samplerate_dict=samplerate_signal, N=N, 

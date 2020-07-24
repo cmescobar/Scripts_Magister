@@ -89,16 +89,33 @@ def get_symptom_images_by_frame(symptom, func_to_apply="normal",
         print("Plot Complete!\n")
 
 
-def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
+def get_symptom_images_at_all(symptom, func_to_apply, samplerate_desired, sep_type='all', N=2048, N_rep=1, 
+                              db_basys=1e-12, padding=0, repeat=0, noverlap=1024, window='hann',
+                              display_time=False):
     '''Función que permite generar una carpeta de plots aplicando una función de 
     interés sobre los archivos de audio de un síntoma en particular
     
-    Parámetros
-    - symptom: Síntoma a procesar
-    - func_to_apply: Función a aplicar sobre los archivos de audio del síntoma
-    - N: Coeficiente utilizado para la repetición de la función "abs_fourier_shift"
-    - display_time: Si el plot muestra como eje x al tiempo (y no a las muestras)
+    Parameters
+    ----------
+    symptom: {'Healthy', 'Pneumonia'}
+        Síntoma a procesar
+    func_to_apply : *args, **kwargs
+        Función a aplicar sobre los archivos de audio del síntoma. Revisar descriptor_functions.
+    samplerate_desired : int
+        Tasa de muestreo deseada.
+    N_rep : int, optional
+        Coeficiente utilizado para la repetición de la función "abs_fourier_shift". Por defecto 
+        es 1.
+    db_basys : float, optional
+        Valor base del espectrograma para evitar log(0). Por defecto es 1e-12.
+    display_time : bool, optional
+        Si el plot incluye la representación temporal. Por defecto es False.
     '''
+    # Corroborar la opción de separación
+    if sep_type not in ['all', 'tracheal', 'toracic_anterior', 'toracic_posterior']:
+        print('The option is not valid. Please try again.')
+        return
+    
     # Obtener las id de los pacientes
     symptom_list = get_patient_by_symptom(symptom)
 
@@ -113,10 +130,18 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
     # Una vez que se haya corroborado la creación de la carpeta, se preguntará
     # si es que la carpeta que almacenará las imágenes para cada función se
     # ha creado. En caso de que no exista, se crea una carpeta
-    if not os.path.isdir(f'Results/{symptom}/{func_to_apply.__name__}'):
-        os.mkdir(f'Results/{symptom}/{func_to_apply.__name__}')
+    folder_to_save = f'Results/{symptom}/{func_to_apply.__name__}/{sep_type}'
+    if not os.path.isdir(folder_to_save):
+        os.makedirs(folder_to_save)
 
     for i in pneumonia_dirs:
+        if sep_type == 'tracheal'and 'Tc' not in i:
+            continue
+        elif sep_type == 'toracic_anterior' and not any(typ in i for typ in ['Al', 'Ar']):
+            continue
+        elif sep_type == 'toracic_posterior' and not any(typ in i for typ in ['Pl', 'Pr']):
+            continue
+        
         # Para guardar la imagen y definir el título del plot, se debe obtener
         # el nombre del archivo de audio
         filename = i.split('/')[-1].strip('.wav')
@@ -125,7 +150,24 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
 
         # Lectura del audio
         audio, samplerate = sf.read(i)
+        
+        # Remuestreando
+        if samplerate_desired < samplerate:
+            # Quitar muestras
+            _, audio_to = downsampling_signal(audio, samplerate, 
+                                              freq_pass=samplerate_desired//2 - 50, 
+                                              freq_stop=samplerate_desired//2, 
+                                              method='lowpass', lp_method='fir',
+                                              resample_method='interp1d',
+                                              fir_method='kaiser', gpass=1, gstop=80,
+                                              correct_by_gd=True, gd_padding='periodic',
+                                              plot_filter=False, normalize=True)
 
+        elif samplerate_desired >= samplerate:
+            # Si se quiere sobre muestrear, no hacer nada
+            audio_to = audio
+            samplerate_desired = samplerate
+        
         # Aplicando la función ingresada
         if func_to_apply.__name__ == "get_spectrogram":
             if display_time:
@@ -138,7 +180,13 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
 
                 plt.subplot(2, 1, 2)
 
-            plt.specgram(audio, Fs=samplerate)
+            # Obteniendo el espectrograma
+            t, f, S = df.get_spectrogram(audio_to, samplerate_desired, N=N, padding=padding, 
+                                      repeat=repeat, noverlap=noverlap, window=window, 
+                                      whole=False)
+            
+            plt.pcolormesh(t, f, 20 * np.log10(abs(S) + db_basys), cmap='jet')
+            plt.colorbar()
             plt.xlabel('Tiempo [seg]')
             plt.ylabel('Frecuencia [Hz]')
             plt.suptitle(f'Plot {filename}')
@@ -153,8 +201,7 @@ def get_symptom_images_at_all(symptom, func_to_apply, N=1, display_time=False):
             plt.title(f'Plot {filename}')
 
         # Guardando la imagen
-        plt.savefig(f"Results/{symptom}/{func_to_apply.__name__}/"
-                    f"{filename}.png")
+        plt.savefig(f"{folder_to_save}/{filename}.png")
 
         # Cerrando la figura
         plt.close()
@@ -739,6 +786,13 @@ def get_detection_vs_labels_heartbeats_db(filepath, freq_pass=950, freq_stop=100
 
 # Módulo de testeo
 
+"""for h in ['Healthy', 'Pneumonia']:
+    for s in ['toracic_anterior', 'toracic_posterior']:
+        get_symptom_images_at_all(h, df.get_spectrogram, 44100//4, sep_type=s,
+                                N=2048, N_rep=1, db_basys=1e-12, padding=0, repeat=0, noverlap=1024,
+                                    window='hann', display_time=False)
+"""
+'''
 filepath = 'Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 10_Resp 0_White noise'
 
 filepaths = \
@@ -766,7 +820,7 @@ for i in filepaths:
 
 
 
-'''
+
 get_wavelets_images_of_heart_sounds(i, freq_pass=950, freq_stop=1000, 
                                         freqs_bp=freqs_bp, method='lowpass', 
                                         lp_method='fir',

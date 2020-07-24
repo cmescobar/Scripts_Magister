@@ -104,6 +104,7 @@ def abs_fourier_db_half(signal_in, samplerate, N_rep):
     return frec[:len(signal_in) // 2], fourier[:len(signal_in)//2] 
 
 
+# Otros
 def get_spectrogram(signal_in, samplerate, N=512, padding=0, repeat=0, noverlap=0, 
                     window='tukey', whole=False):
     '''Función que permite obtener la STFT de una señal.
@@ -144,7 +145,7 @@ def get_spectrogram(signal_in, samplerate, N=512, padding=0, repeat=0, noverlap=
     if N <= noverlap:
         raise Exception('noverlap debe ser menor que N.')
     elif noverlap < 0:
-        raise Excepetion('noverlap no puede ser negativo')
+        raise Exception('noverlap no puede ser negativo')
     else:
         noverlap = int(noverlap)
         

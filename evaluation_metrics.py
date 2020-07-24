@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import signal
+from math_functions import _correlation
 
 
 def get_PSD(signal_in, samplerate, window='hann', N=2048, noverlap=1024):
@@ -220,8 +221,8 @@ def HNRP(signal_original, signal_obtained):
         approach based on spectro-temporal clustering to extract heart sounds. 
         Applied Acoustics. Elsevier.
     '''
-    mixed = np.mean(signal_original ** 2)
-    free = np.mean(signal_obtained ** 2)
+    mixed = np.sum(signal_original ** 2)
+    free = np.sum(signal_obtained ** 2)
     return abs(mixed - free) / mixed
 
 
@@ -247,3 +248,15 @@ def performance_HNRP(hnrp, b):
         Applied Acoustics. Elsevier.
     '''
     return 1 - abs(b - hnrp) / b
+
+
+def psd_correlation(signal_original, signal_obtained, samplerate, window='hann', 
+                    N=2048, noverlap=1024):
+    # Cálculo de las PSD
+    _, psd_ori = get_PSD(signal_original, samplerate, window=window, N=N,
+                         noverlap=noverlap)
+    _, psd_obt = get_PSD(signal_obtained, samplerate, window=window, N=N,
+                         noverlap=noverlap)
+    
+    # Calcular la correlación entre las psd en dB
+    return _correlation(20 * np.log10(psd_ori), 20 * np.log10(psd_obt))

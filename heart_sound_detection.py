@@ -472,7 +472,7 @@ def get_heart_precision_measures(filepath, freq_pass=950, freq_stop=1000,
     print('.csv completed!\n')
 
 
-
+'''
 # Testing module
 filepaths = \
     ['Database_manufacturing/db_HR/Heart Segmentation/Seed-0 - 1_Heart 1_Resp 1_White noise',
@@ -500,3 +500,4 @@ for filepath in filepaths:
                                  plot_show=False, plot_precision_info=True, 
                                  clean_repeated=True, distance_limit=4410,
                                  normalize=True)
+'''

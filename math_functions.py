@@ -288,7 +288,7 @@ def db_attenuation(signal_in, db):
     return signal_in * db_coef(-db)
 
 
-def correlation(a, b):
+def _correlation(a, b):
     '''Función de correlación entre 2 series temporales.
     
     Parameters
@@ -327,6 +327,54 @@ def correlation(a, b):
     return r
 
 
+def _correlations(A, b):
+    '''Función de correlación entre 2 series temporales, en donde A es una
+    matriz de series temporales.
+    
+    Parameters
+    ----------
+    A : ndarray
+        Matriz de series.
+    b : ndarray
+        Serie de entrada.
+    
+    Returns
+    -------
+    r : float
+        N correlaciones entre las 2 entradas, dadas por:
+        1 / (N - 1) * np.sum((a - mu_a) * (b - mu_b)) / (sig_a * sig_b)
+        
+        En donde a corresponde a cada fila de A.
+        
+    Referencias
+    -----------
+    [1] https://en.wikipedia.org/wiki/Correlation_and_dependence
+    '''
+    # Definición de la cantidad de puntos
+    if A.shape[1] == len(b):
+        N = A.shape[1]
+    else:
+        raise Exception(f'Dimensiones entre A ({A.shape}) y b ({b.shape}) no '
+                        f'coinciden.')
+    
+    # Cálculo de la media de ambas series
+    mu_a = A.mean(axis=1)
+    mu_b = b.mean()
+    
+    # Cálculo de la desviación estándar de ambas series
+    sig_a = A.std(axis=1)
+    sig_b = b.std()
+    
+    # Definición de correlación
+    r =  1 / (N - 1) * np.sum((A.T - mu_a).T * (b - mu_b), axis=1) / (sig_a * sig_b)
+    
+    # Propiedad de límite para r    
+    r = np.where(r >= 1, 1, r)
+    r = np.where(r <= -1, -1, r)
+
+    return r
+
+
 def cosine_similarity(a, b):
     '''Similitud coseno entre un vector a y b.
     
@@ -357,8 +405,10 @@ def cosine_similarities(A, b):
     
     Parameters
     ----------
-    a, b : array_shape
-        Entradas a comparar.
+    A : ndarray
+        Matriz de series.
+    b : ndarray
+        Serie de entrada.
     
     Returns
     -------

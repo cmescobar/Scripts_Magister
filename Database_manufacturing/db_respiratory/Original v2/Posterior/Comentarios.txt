@@ -1,0 +1,3 @@
+En general cuando se trató de hacer esta base, funcionaron mejor los del sector izquierdo. 
+Los del sector derecho poseen menos presencia de sonido respiratorio, y en general se tiende 
+a incluir más sonido cardiaco.

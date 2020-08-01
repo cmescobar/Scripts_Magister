@@ -226,7 +226,7 @@ def HNRP(signal_original, signal_obtained):
     return abs(mixed - free) / mixed
 
 
-def performance_HNRP(hnrp, b):
+def performance_HNRP(hnrp, signal_hr, signal_heart):
     '''Medida de desempeño de una atenuación de sonido cardíaco en base al valor
     de HNRP.
     
@@ -234,8 +234,10 @@ def performance_HNRP(hnrp, b):
     ----------
     hnrp : float
         Valor de HNRP calculado.
-    b : float
-        Porcentaje de presencia del sonido cardíaco en el sonido cardiorespiratorio.
+    signal_hr: ndarray
+        Señal cardiorespiratoria correspondiente (original).
+    signal_heart : ndarray
+        Señal cardiaca correspondiente (original).
         
     References
     ----------
@@ -247,6 +249,9 @@ def performance_HNRP(hnrp, b):
         approach based on spectro-temporal clustering to extract heart sounds. 
         Applied Acoustics. Elsevier.
     '''
+    # Porcentaje de presencia del sonido cardíaco en el sonido cardiorespiratorio.
+    b = sum(abs(signal_heart)) / sum(abs(signal_hr))
+    
     return 1 - abs(b - hnrp) / b
 
 

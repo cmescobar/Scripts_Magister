@@ -12,7 +12,8 @@ from fading_functions import fade_connect_signals, fading_signal
 from math_functions import wiener_filter, raised_cosine_fading
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram, centroide
 from filter_and_sampling import resampling_by_points, lowpass_filter, downsampling_signal
-from clustering_functions import spectral_correlation_test, roll_off_test, temporal_correlation_test
+from clustering_functions import spectral_correlation_test, centroid_test,\
+    temporal_correlation_test, temporal_correlation_test_segment
 
 
 def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=1024, 
@@ -911,14 +912,20 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
     
     elif sep_type == 'masked segments':
         # Definición del diccionario que contiene los parámetros de simulación
-        dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
-                           'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
-                           'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
-                           'filter_out': filter_out, 'init': init, 
-                           'solver': solver, 'beta': beta, 'tol': tol, 
+        dict_simulation = {'n_components': n_components, 'N': N, 'clustering': clustering,
+                           'N_lax': N_lax, 'N_fade': N_fade, 'noverlap': noverlap, 
+                           'repeat': repeat, 'padding': padding, 'window': window, 
+                           'filter_out': filter_out, 'init': init, 'solver': solver, 
+                           'beta': beta, 'tol': tol, 
                            'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
                            'l1_ratio': l1_ratio, 'random_state': random_state,
-                           'scale': scale}
+                           'scale': scale, 'ausc_zone': ausc_zone, 
+                           'fcut_spect_crit': fcut_spect_crit, 
+                           'measure_spect_crit': measure_spect_crit, 
+                           'i_selection': i_selection, 'f1_roll': f1_roll, 
+                           'f2_roll': f2_roll, 'measure_temp_crit': measure_temp_crit, 
+                           'H_binary': H_binary, 'reduce_to_H': reduce_to_H, 
+                           'dec_criteria': dec_criteria}
         
         # Definición del filepath a guardar
         filepath_to_save = f'{filepath}/Components/Masking on segments'
@@ -950,7 +957,9 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
         dir_audio = f"{filepath}/{audio_name}"
         
         if sep_type == 'to all':
-            nmf_applied_all(dir_audio, filepath_to_save_id, samplerate_des=samplerate_des,
+            nmf_applied_all(dir_audio, filepath_to_save_id, 
+                            assign_method=assign_method,  
+                            samplerate_des=samplerate_des,
                             clustering=clustering, n_components=n_components, N=N, 
                             noverlap=noverlap, padding=padding, repeat=repeat, 
                             window=window, whole=whole,
@@ -989,27 +998,36 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
                                           clustering=clustering)
         
         elif sep_type == 'masked segments':
-            nmf_applied_masked_segments(dir_audio, assign_method=assign_method, 
+            nmf_applied_masked_segments(dir_audio, samplerate_des=samplerate_des,
+                                        assign_method=assign_method, 
                                         n_components=n_components, N=N, 
                                         N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
-                                        padding=padding, window=window, whole=whole, 
-                                        alpha_wiener=alpha_wiener, 
+                                        padding=padding, repeat=repeat, window=window, 
+                                        whole=whole, alpha_wiener=alpha_wiener, 
                                         filter_out=filter_out, init=init, 
                                         solver=solver, beta=beta, tol=tol, 
                                         max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                         l1_ratio=l1_ratio, random_state=random_state, 
                                         W_0=W_0, H_0=H_0, plot_segments=plot_segments, 
-                                        scale=scale)
+                                        scale=scale, ausc_zone=ausc_zone, 
+                                        fcut_spect_crit=fcut_spect_crit, 
+                                        measure_spect_crit=measure_spect_crit, 
+                                        i_selection=i_selection, 
+                                        f1_roll=f1_roll, f2_roll=f2_roll, 
+                                        measure_temp_crit=measure_temp_crit,
+                                        H_binary=H_binary, reduce_to_H=reduce_to_H, 
+                                        dec_criteria=dec_criteria, version=version, 
+                                        clustering=clustering)
             
         else:
             raise Exception('Opción para "sep_type" no soportada.')
 
 
-def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, clustering=True, 
-                    n_components=2, N=2048, noverlap=1024, repeat=0, padding=0, 
-                    window='hamming', whole=False, alpha_wiener=1, filter_out='wiener', 
-                    init='random', solver='cd', beta=2, tol=1e-4, max_iter=200, 
-                    alpha_nmf=0, l1_ratio=0, random_state=0, W_0=None, H_0=None, 
+def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method, 
+                    clustering=True, n_components=2, N=2048, noverlap=1024, repeat=0, 
+                    padding=0, window='hamming', whole=False, alpha_wiener=1, 
+                    filter_out='wiener', init='random', solver='cd', beta=2, tol=1e-4, 
+                    max_iter=200, alpha_nmf=0, l1_ratio=0, random_state=0, W_0=None, H_0=None, 
                     scale='abs', version=2, ausc_zone='Anterior', fcut_spect_crit=200, 
                     measure_spect_crit='correlation', i_selection='max', f1_roll=20, 
                     f2_roll=150, measure_temp_crit='q_equal', H_binary=True, 
@@ -1071,102 +1089,145 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, clustering=Tr
         samplerate_des = samplerate
     
     # Aplicando la descomposición
-    comps, X_list, _, W, H = nmf_decomposition(signal_to, samplerate_des, 
-                                               n_components=n_components, 
-                                               N=N, noverlap=noverlap, padding=padding,
-                                               repeat=repeat, window=window, whole=whole, 
-                                               alpha_wiener=alpha_wiener,
-                                               filter_out=filter_out, init=init, 
-                                               solver=solver, beta=beta, tol=tol, 
-                                               max_iter=max_iter, alpha_nmf=alpha_nmf, 
-                                               l1_ratio=l1_ratio, random_state=random_state,
-                                               W_0=W_0, H_0=H_0, scale=scale)
+    comps, _, _, W, H = nmf_decomposition(signal_to, samplerate_des, 
+                                          n_components=n_components, 
+                                          N=N, noverlap=noverlap, padding=padding,
+                                          repeat=repeat, window=window, whole=whole, 
+                                          alpha_wiener=alpha_wiener,
+                                          filter_out=filter_out, init=init, 
+                                          solver=solver, beta=beta, tol=tol, 
+                                          max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                          l1_ratio=l1_ratio, random_state=random_state,
+                                          W_0=W_0, H_0=H_0, scale=scale)
     
     # Definiendo el nombre de los archivos
     dir_to_save = f'{filepath_to_save_id}/{audio_name.strip(".wav")}/'
+    
     # Preguntar si es que la carpeta que almacenará las imágenes se ha
     # creado. En caso de que no exista, se crea una carpeta
     if not os.path.isdir(dir_to_save):
         os.makedirs(dir_to_save)
     
     # Criterios de decisión
-    if n_components > 2 or clustering:
-        # CRITERIO 1: Definición de la ubicación del diccionario
-        filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+    if n_components == 2 and not clustering:
+        if assign_method == 'auto':
+            # Se calculan los centroides
+            comp1_centroid = centroide(W[:,0])
+            comp2_centroid = centroide(W[:,1])
+            
+            # Definición de la decisión
+            heart_dec = 0 if comp1_centroid >= comp2_centroid else 1
+            
+            # Generar plots
+            _ = _plot_nmf(signal_to, samplerate_des, comps, W, H, 
+                          filepath_to_save=dir_to_save,
+                          assign_method=assign_method)
+            
+            # Definición del texto a guardar
+            save_txt = ' centroid k2'
         
-        # Definición de la carpeta a revisar
-        folder = f'{dir_file.split("/")[0]}'
+        elif assign_method == 'manual':
+            # Decisión a tomar
+            heart_dec = _plot_nmf(signal_to, samplerate_des, comps, W, H, 
+                                  filepath_to_save=dir_to_save,
+                                  assign_method=assign_method)
+            # Definición del texto a guardar
+            save_txt = ''
         
-        # Definición del nombre del archivo de sonidos cardiacos
-        heart_segments = f'{dir_file.split("/")[-1].strip(".wav").split(" ")[-1]}'
+        elif assign_method == 'labeled':
+            # Se obtiene la decisión etiquetada como sonido cardíaco
+            with open(f'{dir_to_save}/Heart decision.txt', 'r', encoding='utf8') as data:
+                heart_dec = literal_eval(data.readline().strip())
+            
+            # Definición del texto a guardar
+            save_txt = ''
         
-        # Definición de la ubicación de los segmentos de sonido cardiaco de interés
-        if version == 1:
-            filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
-                                      f'{heart_segments} - segments.txt'
-        else:
-            filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
-                                      f'{ausc_zone}/{heart_segments} - segments.txt'
-        
-        # Aplicación de los criterios
-        ## CRITERIO 1
-        a1_bool, _ = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, N, noverlap, 
-                                               n_comps_dict=4, beta=beta, 
-                                               filepath_data=filepath_dict, 
-                                               padding=padding, repeat=repeat, 
-                                               measure=measure_spect_crit, 
-                                               i_selection=i_selection, threshold='mean')
-
-        ## CRITERIO 2
-        a2_bool = roll_off_test(X_list, f1=f1_roll, f2=f2_roll, samplerate=samplerate_des, 
-                                whole=whole, percentage=0.85)
-        
-        ## CRITERIO 3
-        a3_bool, _ = temporal_correlation_test(H, filename_heart_segments, samplerate, 
-                                               samplerate_des, N=N, N_audio=len(signal_in), 
-                                               noverlap=noverlap, threshold='mean', 
-                                               measure=measure_temp_crit, 
-                                               H_binary=H_binary, reduce_to_H=reduce_to_H,
-                                               version=version, ausc_zone=ausc_zone)
-        
-        # Decisión final
-        if dec_criteria == 'or':
-            decision = a1_bool | a2_bool | a3_bool
-        elif dec_criteria == 'vote':
-            decision = (a1_bool + a2_bool + a3_bool) >= 2
-        
-        # Definición de assign method (utilizada en el _plot_nmf)
-        assign_method = 'auto'
-    else:
-        # Definición de assign method (utilizada en el _plot_nmf)
-        assign_method = 'manual'
-    
-    # Elegir guardar o no en decision
-    if assign_method == 'manual':
-        # Decisión a tomar
-        heart_dec = _plot_nmf(signal_to, comps, W, H, filepath_to_save=dir_to_save,
-                            assign_method=assign_method)
+        # Definición de la decisión de respiración
         resp_dec = 1 if heart_dec == 0 else 0
         
-        # Registrando
-        with open(f'{dir_to_save}/Heart decision.txt', 'w', encoding='utf8') as file:
-            file.write(str(heart_dec))
-        
-        # Finalmente, grabando los archivos
-        sf.write(f'{dir_to_save} Heart Sound.wav', comps[heart_dec], samplerate_des)
-        sf.write(f'{dir_to_save} Respiratory Sound.wav', comps[resp_dec], samplerate_des)
-
-    elif assign_method == 'auto':
-        _ = _plot_nmf(signal_to, comps, W, H, filepath_to_save=dir_to_save,
-                      assign_method=assign_method)
-        
-        # Finalmente, grabando los archivos
-        for num, dec in enumerate(decision):
-            # Grabando cada componente
-            if dec:
-                sf.write(f'{dir_to_save} Heart Sound.wav', comps[num], samplerate_des)
+        # Definiendo las señales
+        heart_signal = comps[heart_dec]
+        resp_signal = comps[resp_dec]
+    
+    elif n_components > 2 or clustering:
+        if assign_method == 'auto':
+            # CRITERIO 1: Definición de la ubicación del diccionario
+            filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+            
+            # Definición de la carpeta a revisar
+            folder = f'{dir_file.split("/")[0]}'
+            
+            # Definición del nombre del archivo de sonidos cardiacos
+            heart_segments = f'{dir_file.split("/")[-1].strip(".wav").split(" ")[-1]}'
+            
+            # Definición de la ubicación de los segmentos de sonido cardiaco de interés
+            if version == 1:
+                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                        f'{heart_segments} - segments.txt'
             else:
-                sf.write(f'{dir_to_save} Respiratory Sound.wav', comps[num], samplerate_des)
+                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                        f'{ausc_zone}/{heart_segments} - segments.txt'
+            
+            # Aplicación de los criterios
+            ## CRITERIO 1: Correlación espectral
+            a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
+                                                    N=N, noverlap=noverlap, 
+                                                    n_comps_dict=4, beta=beta, 
+                                                    filepath_data=filepath_dict, 
+                                                    padding=padding, repeat=repeat, 
+                                                    measure=measure_spect_crit, 
+                                                    i_selection=i_selection, threshold='mean')
+
+            ## CRITERIO 2: Centroide espectral
+            a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+            
+            ## CRITERIO 3: Correlación temporal
+            a3_bool, a3 = temporal_correlation_test(H, filename_heart_segments, samplerate, 
+                                                    samplerate_des, N=N, N_audio=len(signal_in), 
+                                                    noverlap=noverlap, threshold='mean', 
+                                                    measure=measure_temp_crit, 
+                                                    H_binary=H_binary, reduce_to_H=reduce_to_H,
+                                                    version=version, ausc_zone=ausc_zone)
+            
+            # Decisión final
+            if dec_criteria == 'or':
+                heart_dec = a1_bool | a2_bool | a3_bool
+            elif dec_criteria == 'vote':
+                heart_dec = (a1_bool.astype(int) + a2_bool.astype(int) + 
+                             a3_bool.astype(int)) >= 2
+            elif dec_criteria == 'and':
+                heart_dec = a1_bool & a2_bool & a3_bool
+            
+            # Definición de las señales a grabar
+            heart_signal = np.zeros(len(comps[0]))
+            resp_signal = np.zeros(len(comps[0]))
+            
+            # Finalmente, grabando los archivos
+            for num, dec in enumerate(heart_dec):
+                # Grabando cada componente
+                if dec:
+                    heart_signal += comps[num]
+                else:
+                    resp_signal += comps[num]
+            
+            # Definición del texto a guardar
+            save_txt = ' clustering'
+            
+            # Graficar
+            _plot_clustering_points(dir_to_save, a1, a2, a3, 
+                                    measure_temp_crit)
+            
+        elif assign_method == 'labeled':
+            pass
+    
+    # Registrando
+    if assign_method in ['auto', 'manual']:
+        with open(f'{dir_to_save}/Heart decision{save_txt}.txt', 'w', encoding='utf8') as data:
+            data.write(str(heart_dec))
+    
+    # Finalmente, grabando los archivos
+    sf.write(f'{dir_to_save} Heart Sound{save_txt}.wav', heart_signal, samplerate_des)
+    sf.write(f'{dir_to_save} Respiratory Sound{save_txt}.wav', resp_signal, samplerate_des)
     
     return comps
 
@@ -1294,9 +1355,9 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
     
     ## Luego se define la dirección del archivo de segmentos
     if version == 1:
-        segment_folder = f'Database_manufacturing/db_heart/Manual Combinations v{version}'
+        segment_folder = f'Database_manufacturing/db_heart/Manual combinations v{version}'
     else:
-        segment_folder = f'Database_manufacturing/db_heart/Manual Combinations v{version}/{ausc_zone}'
+        segment_folder = f'Database_manufacturing/db_heart/Manual combinations v{version}/{ausc_zone}'
     
     try:
         ## Y se retorna el archivo de segmentos correspondiente al nombre
@@ -1306,7 +1367,7 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
         ## Se abre el archivo y se obtiene la lista de intervalos
         with open(f'{segment_folder}/{name_file_segment}', 'r', encoding='utf8') as data:
             interval_list = literal_eval(data.readline())
-        
+    
     except:
         raise Exception(f'No se logra encontrar el archivo con intervalos cardíacos de '
                         f'{filename}')
@@ -1317,13 +1378,17 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
     heart_signal = np.zeros(len(signal_to))
     
     # Definición de la lista de puntos para ambos casos
-    if assign_method == 'auto':
-        # Se obtiene la decisión etiquetada como sonido cardíaco
-        with open(f'{filepath_to_save_name}/Heart comp labels.txt',
-                    'r', encoding='utf8') as data:
-            comps_choice = literal_eval(data.readline().strip())
+    if assign_method == 'labeled':
+        if n_components == 2 and not clustering:
+            # Se obtiene la decisión etiquetada como sonido cardíaco
+            with open(f'{filepath_to_save_name}/Heart comp labels.txt',
+                        'r', encoding='utf8') as data:
+                comps_choice = literal_eval(data.readline().strip())
+        
+        elif n_components > 2 or clustering:
+            pass
     
-    elif assign_method == 'manual':
+    elif assign_method in ['auto', 'manual']:
         heart_comp_labels = list()
     
     # Aplicando NMF en cada segmento de interés
@@ -1337,67 +1402,158 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
         
         # Aplicando NMF 
         comps, _, _, W, H = nmf_decomposition(segment, samplerate_des, 
-                                               n_components=n_components, 
-                                               N=N, noverlap=noverlap, padding=padding,
-                                               repeat=repeat, window=window, whole=whole, 
-                                               alpha_wiener=alpha_wiener,
-                                               filter_out=filter_out, init=init, 
-                                               solver=solver, beta=beta, tol=tol, 
-                                               max_iter=max_iter, alpha_nmf=alpha_nmf, 
-                                               l1_ratio=l1_ratio, random_state=random_state,
-                                               W_0=W_0, H_0=H_0, scale=scale)
+                                              n_components=n_components, 
+                                              N=N, noverlap=noverlap, padding=padding, 
+                                              repeat=repeat, window=window, whole=whole, 
+                                              alpha_wiener=alpha_wiener, 
+                                              filter_out=filter_out, init=init, 
+                                              solver=solver, beta=beta, tol=tol, 
+                                              max_iter=max_iter, alpha_nmf=alpha_nmf, 
+                                              l1_ratio=l1_ratio, random_state=random_state,
+                                              W_0=W_0, H_0=H_0, scale=scale)
         
         # Graficos
         if plot_segments or assign_method == 'manual':
-            decision_in_plot = _plot_segments_nmf(signal_to, samplerate_des, comps, 
-                                                  W, H, N_fade, lower, upper, num, 
-                                                  filepath_to_save_name, assign_method)
-            
-        if assign_method == 'auto':
-            heart_decision = comps_choice[num - 1]
+            if n_components == 2:
+                decision_in_plot = _plot_segments_nmf(signal_to, samplerate_des, comps, 
+                                                    W, H, N_fade, lower, upper, num, 
+                                                    filepath_to_save_name, assign_method)
         
-        elif assign_method == 'manual':
-            # Se pregunta para la decisión del sonido cardíaco
-            heart_decision = decision_in_plot
+        # Método a implementar
+        if n_components == 2 and not clustering:
+            if assign_method == 'auto':
+                # Se calculan los centroides
+                comp1_centroid = centroide(W[:,0])
+                comp2_centroid = centroide(W[:,1])
+                
+                # Definición de la decisión
+                heart_decision = 0 if comp1_centroid >= comp2_centroid else 1
+                
+                # Definición del texto a guardar
+                save_txt = ' centroid k2'
+            
+            elif assign_method == 'manual':
+                # Se pregunta para la decisión del sonido cardíaco
+                heart_decision = decision_in_plot
+                
+                # Definición del texto a guardar
+                save_txt = ''
+            
+            elif assign_method == 'labeled':
+                # Leyendo los registros
+                heart_decision = comps_choice[num - 1]
+                
+                # Definición del texto a guardar
+                save_txt = ''
             
             # Se agrega la decisión a la lista de labels
             heart_comp_labels.append(heart_decision)
-        
-        # Y se complementa para el sonido respiratorio
-        resp_decision = 0 if heart_decision == 1 else 1
+            
+            # Y se complementa para el sonido respiratorio
+            resp_decision = 0 if heart_decision == 1 else 1
+            
+            # Definición de la componente de señal respiratoria y cardiaca
+            heart_comps = comps[heart_decision][:len(segment)]
+            resp_comps = comps[resp_decision][:len(segment)]
+
+        elif n_components > 2 or clustering:
+            if assign_method == 'auto':
+                # CRITERIO 1: Definición de la ubicación del diccionario
+                filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+
+                # Aplicación de los criterios
+                ## CRITERIO 1: Correlación espectral
+                a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
+                                                        N=N, noverlap=noverlap, 
+                                                        n_comps_dict=4, beta=beta, 
+                                                        filepath_data=filepath_dict, 
+                                                        padding=padding, repeat=repeat, 
+                                                        measure=measure_spect_crit, 
+                                                        i_selection=i_selection, threshold='mean')
+                
+                ## CRITERIO 2: Centroide espectral
+                a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+                
+                ## CRITERIO 3: Correlación temporal
+                a3_bool, a3 = \
+                     temporal_correlation_test_segment(H, lower, upper, N_fade, 
+                                                       N_lax // sr_ratio, 
+                                                       samplerate_des,
+                                                       threshold='mean', 
+                                                       measure=measure_temp_crit, 
+                                                       H_binary=H_binary)
+                
+                # Decisión final
+                if dec_criteria == 'or':
+                    heart_dec = a1_bool | a2_bool | a3_bool
+                elif dec_criteria == 'vote':
+                    heart_dec = (a1_bool.astype(int) + a2_bool.astype(int) + 
+                                 a3_bool.astype(int)) >= 2
+                elif dec_criteria == 'and':
+                    heart_dec = a1_bool & a2_bool & a3_bool
+                
+                # Definición de las señales a grabar
+                heart_comps = np.zeros(len(comps[0]))
+                resp_comps = np.zeros(len(comps[0]))
+                
+                # Finalmente, grabando los archivos
+                for num_comp, dec in enumerate(heart_dec):
+                    # Grabando cada componente
+                    if dec:
+                        heart_comps += comps[num_comp]
+                    else:
+                        resp_comps += comps[num_comp]
+                
+                # Definición del texto a guardar
+                save_txt = ' clustering'
+                
+                # Graficar
+                _plot_clustering_points(filepath_to_save_name, a1, a2, a3, 
+                                        measure_temp_crit)
+                _plot_segments_nmf_kmore(signal_to, heart_comps, resp_comps, N_fade, 
+                                         lower, upper, num, filepath_to_save_name)
+            
+            
+            elif assign_method == 'labeled':
+                pass
         
         # Definición de la lista de señales a concatenar con fading para el corazón
-        heart_connect = (heart_signal[:lower], comps[heart_decision][:len(segment)],
-                         heart_signal[upper:])
+        heart_connect = (heart_signal[:lower], heart_comps, heart_signal[upper:])
         
         # Definición de la lista de señales a concatenar con fading para la respiración
-        resp_connect = (resp_signal[:lower], comps[resp_decision][:len(segment)],
-                        resp_signal[upper:])
+        resp_connect = (resp_signal[:lower], resp_comps, resp_signal[upper:])
         
         # Aplicando fading para cada uno
         heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
         resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
     
-    # Finalmente
-    if assign_method == 'manual':
-        # Finalmente, se escribe en un archivo las etiquetas de las componentes
-        with open(f'{filepath_to_save_name}/Heart comp labels.txt', 'w', encoding='utf8') as data:
+    if assign_method in ['auto', 'manual']:
+        # Guardando el archivo de registro
+        with open(f'{filepath_to_save_name}/Heart comp labels{save_txt}.txt', 'w', 
+                encoding='utf8') as data:
             data.write(f'{heart_comp_labels}')
-
+        
     # Finalmente, grabando los archivos de audio
-    sf.write(f'{filepath_to_save_name}/Respiratory signal.wav', resp_signal, samplerate_des)
-    sf.write(f'{filepath_to_save_name}/Heart signal.wav', heart_signal, samplerate_des)
-    
+    sf.write(f'{filepath_to_save_name}/Respiratory signal{save_txt}.wav', 
+                resp_signal, samplerate_des)
+    sf.write(f'{filepath_to_save_name}/Heart signal{save_txt}.wav', 
+                heart_signal, samplerate_des)
+        
     return resp_signal, heart_signal
 
 
-def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2, 
+def nmf_applied_masked_segments(dir_file, samplerate_des, assign_method='manual', n_components=2, 
                                 N=2048, N_lax=0, N_fade=100, noverlap=1024, padding=0,
-                                window='hamming', whole=False, alpha_wiener=1, 
+                                repeat=0, window='hamming', whole=False, alpha_wiener=1, 
                                 filter_out='wiener', init='random', solver='cd', beta=2,
                                 tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                                 random_state=0, W_0=None, H_0=None, 
-                                plot_segments=False, scale='abs'):
+                                plot_segments=False, scale='abs', 
+                                ausc_zone='Anterior', fcut_spect_crit=200, 
+                                measure_spect_crit='correlation', i_selection='max', 
+                                f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
+                                H_binary=True, reduce_to_H=False, dec_criteria='or', 
+                                version=2, clustering=False):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
     ubicación en el ordenador), la cual solamente descompone en segmentos de interés
     previamente etiquetados, aplicando una máscara y descomponiendo la señal completa.
@@ -1449,12 +1605,23 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     # Abriendo el archivo de sonido
     signal_in, samplerate = sf.read(f'{dir_file}')
     
+    # Solo si es que hay que bajar puntos se baja, en caso contrario se mantiene
+    if samplerate_des < samplerate:
+        _, signal_to = downsampling_signal(signal_in, samplerate, 
+                                           samplerate_des//2-100, 
+                                           samplerate_des//2)
+        sr_ratio = samplerate // samplerate_des
+    else:
+        signal_to = signal_in
+        samplerate_des = samplerate
+        sr_ratio = 1
+    
     # Definición de la carpeta donde se ubica
     filepath = '/'.join(dir_file.split('/')[:-1])
     
     # Definición del nombre del archivo
     filename = dir_file.strip('.wav').split('/')[-1]
-        
+    
     # Definición de la carpeta a guardar los segmentos
     filepath_to_save = f'{filepath}/Components/Masking on segments'
     
@@ -1464,14 +1631,20 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
         os.makedirs(filepath_to_save)
     
     # Definición del diccionario que contiene los parámetros de simulación
-    dict_simulation = {'n_components': n_components, 'N': N, 'N_lax': N_lax,
-                       'N_fade': N_fade, 'noverlap': noverlap, 'padding': padding,
-                       'window': window, 'whole': whole, 'alpha_wiener': alpha_wiener,
-                       'filter_out': filter_out, 'init': init, 
-                       'solver': solver, 'beta': beta, 'tol': tol, 
+    dict_simulation = {'n_components': n_components, 'N': N, 'clustering': clustering,
+                       'N_lax': N_lax, 'N_fade': N_fade, 'noverlap': noverlap, 
+                       'repeat': repeat, 'padding': padding, 'window': window, 
+                       'filter_out': filter_out, 'init': init, 'solver': solver, 
+                       'beta': beta, 'tol': tol, 
                        'max_iter': max_iter, 'alpha_nmf': alpha_nmf, 
                        'l1_ratio': l1_ratio, 'random_state': random_state,
-                       'scale': scale}
+                       'scale': scale, 'ausc_zone': ausc_zone, 
+                       'fcut_spect_crit': fcut_spect_crit, 
+                       'measure_spect_crit': measure_spect_crit, 
+                       'i_selection': i_selection, 'f1_roll': f1_roll, 
+                       'f2_roll': f2_roll, 'measure_temp_crit': measure_temp_crit, 
+                       'H_binary': H_binary, 'reduce_to_H': reduce_to_H, 
+                       'dec_criteria': dec_criteria}
     
     # Control de parámetros simulación (consultar repetir) y asignación de id's
     dict_simulation, _ = _manage_registerdata_nmf(dict_simulation, 
@@ -1492,7 +1665,10 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
     file_heart = filename.split(' ')[-1].strip('.wav')
     
     ## Luego se define la dirección del archivo de segmentos
-    segment_folder = f'Database_manufacturing/db_heart/Manual Combinations'
+    if version == 1:
+        segment_folder = f'Database_manufacturing/db_heart/Manual combinations v{version}'
+    else:
+        segment_folder = f'Database_manufacturing/db_heart/Manual combinations v{version}/{ausc_zone}'
     
     try:
         ## Y se retorna el archivo de segmentos correspondiente al nombre
@@ -1502,34 +1678,33 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
         ## Se abre el archivo y se obtiene la lista de intervalos
         with open(f'{segment_folder}/{name_file_segment}', 'r', encoding='utf8') as data:
             interval_list = literal_eval(data.readline())
-        
+    
     except:
         raise Exception(f'No se logra encontrar el archivo con intervalos cardíacos de '
                         f'{filename}')
     
     # Definición de la señal a descomponer mediante NMF
-    to_decompose = np.zeros(len(signal_in))
+    to_decompose = np.zeros(len(signal_to))
     # Definición de la señal respiratoria de salida
-    resp_signal = np.copy(signal_in)
+    resp_signal = np.copy(signal_to)
     # Definición de la señal cardíaca de salida
-    heart_signal = np.zeros(len(signal_in))
-    
+    heart_signal = np.zeros(len(signal_to))
     
     # Transformando la señal 
     for interval in interval_list:
         # Definición del límite inferior y superior
-        lower = interval[0] - N_lax
-        upper = interval[1] + N_lax
+        lower = (interval[0] - N_lax) // sr_ratio
+        upper = (interval[1] + N_lax) // sr_ratio
         
         # Agregando los valores de la señal a descomponer
-        to_decompose_faded = fading_signal(signal_in[lower - N_fade:upper + N_fade],
+        to_decompose_faded = fading_signal(signal_to[lower - N_fade:upper + N_fade],
                                            N_fade, beta=1, side='both')
         
         to_decompose[lower - N_fade:upper + N_fade] += to_decompose_faded
-        resp_signal[lower:upper] -= signal_in[lower:upper]
+        resp_signal[lower:upper] -= signal_to[lower:upper]
 
     # Aplicando NMF 
-    comps, _, _, W, H = nmf_decomposition(to_decompose, samplerate, 
+    comps, _, _, W, H = nmf_decomposition(to_decompose, samplerate_des, 
                                           n_components=n_components, 
                                           N=N, noverlap=noverlap, padding=padding,
                                           window=window, whole=whole, 
@@ -1542,68 +1717,179 @@ def nmf_applied_masked_segments(dir_file, assign_method='manual', n_components=2
 
     # Graficos
     if plot_segments or assign_method == 'manual':
-        decision_in_plot = _plot_masked_nmf(signal_in, comps, W, H, 
-                                            filepath_to_save_name, assign_method)
+        if n_components == 2:
+            decision_in_plot = _plot_masked_nmf(signal_to, samplerate_des, comps, W, H, 
+                                                filepath_to_save_name, assign_method)
     
-    if assign_method == 'auto_labeled':
-        # Se obtiene la decisión etiquetada como sonido cardíaco
-        with open(f'{filepath_to_save_name}/Heart decision.txt', 'r', encoding='utf8') as data:
-            heart_decision = literal_eval(data.readline().strip())
-    
-    elif assign_method == 'auto_centroid':
-        # Se calculan los centroides
-        comp1_centroid = centroide(W[:,0])
-        comp2_centroid = centroide(W[:,1])
-        
-        # Definición de la decisión
-        heart_decision = 0 if comp1_centroid >= comp2_centroid else 1
-        
-        with open(f'{filepath_to_save_name}/Heart decision centroid.txt', 
-                  'w', encoding='utf8') as data:
-            data.write(str(heart_decision))
-    
-    elif assign_method == 'manual':
-        # Se pregunta para la decisión del sonido cardíaco
-        heart_decision = decision_in_plot
-    
-    # Y se complementa para el sonido respiratorio
-    resp_decision = 0 if heart_decision == 1 else 1
-      
-    # Para conectarlas adecuadamente a la señal de interés
-    for num, interval in enumerate(interval_list, 1):
-        # Definición del límite inferior y superior
-        lower = interval[0] - N_lax
-        upper = interval[1] + N_lax
+    if n_components == 2 and not clustering:
+        if assign_method == 'auto':
+            # Se calculan los centroides
+            comp1_centroid = centroide(W[:,0])
+            comp2_centroid = centroide(W[:,1])
+            
+            # Definición de la decisión
+            heart_decision = 0 if comp1_centroid >= comp2_centroid else 1
+            
+            # Definición del texto a guardar
+            save_txt = ' centroid k2'
 
-        # Graficando los segmentos
-        _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision, 
-                                  lower, upper, N_fade, num, filepath_to_save_name)
+        elif assign_method == 'manual':
+            # Se pregunta para la decisión del sonido cardíaco
+            heart_decision = decision_in_plot
+            
+            # Definición del texto a guardar
+            save_txt = ''
+            
+        elif assign_method == 'labeled':
+            # Se obtiene la decisión etiquetada como sonido cardíaco
+            with open(f'{filepath_to_save_name}/Heart decision.txt', 'r', 
+                      encoding='utf8') as data:
+                heart_decision = literal_eval(data.readline().strip())
         
-        # Definición de la lista de señales a concatenar con fading para el corazón
-        heart_connect = (heart_signal[:lower], comps[heart_decision][lower-N_fade:upper+N_fade], 
-                         heart_signal[upper:])
-        # Definición de la lista de señales a concatenar con fading para la respiración
-        resp_connect = (resp_signal[:lower], comps[resp_decision][lower - N_fade:upper + N_fade], 
-                        resp_signal[upper:])
+        # Y se complementa para el sonido respiratorio
+        resp_decision = 0 if heart_decision == 1 else 1
+        
+        # Para conectarlas adecuadamente a la señal de interés
+        for num, interval in enumerate(interval_list, 1):
+            # Definición del límite inferior y superior
+            lower = (interval[0] - N_lax) // sr_ratio
+            upper = (interval[1] + N_lax) // sr_ratio
 
-        #plt.plot(range(0,lower), resp_signal[:lower], color='C0', zorder=2)
-        #plt.plot(range(lower - N_fade,upper + N_fade), 
-        #        comps[resp_decision][lower - N_fade:upper + N_fade], color='C1', zorder=2)
-        #plt.plot(range(upper, len(resp_signal)), resp_signal[upper:], color='C2', zorder=2)
-        #plt.plot(resp_signal, linewidth=5, color='C3', zorder=1)
+            # Graficando los segmentos
+            _plot_masked_segments_nmf(signal_to, comps, heart_decision, resp_decision, 
+                                      lower, upper, N_fade, num, filepath_to_save_name)
+            
+            # Definición de la lista de señales a concatenar con fading para el corazón
+            heart_connect = (heart_signal[:lower], 
+                             comps[heart_decision][lower-N_fade:upper+N_fade], 
+                             heart_signal[upper:])
+            # Definición de la lista de señales a concatenar con fading para la respiración
+            resp_connect = (resp_signal[:lower], 
+                            comps[resp_decision][lower - N_fade:upper + N_fade], 
+                            resp_signal[upper:])
+
+            #plt.plot(range(0,lower), resp_signal[:lower], color='C0', zorder=2)
+            #plt.plot(range(lower - N_fade,upper + N_fade), 
+            #comps[resp_decision][lower - N_fade:upper + N_fade], color='C1', zorder=2)
+            #plt.plot(range(upper, len(resp_signal)), resp_signal[upper:], color='C2', zorder=2)
+            #plt.plot(resp_signal, linewidth=5, color='C3', zorder=1)
+            
+            # Aplicando fading para cada uno
+            heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
+            resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
         
-        # Aplicando fading para cada uno
-        heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
-        resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
+        # Guardando
+        if assign_method in ['auto', 'manual']:
+            # Registro del archivo de la simulación
+            with open(f'{filepath_to_save_name}/Heart decision{save_txt}.txt', 
+                    'w', encoding='utf8') as data:
+                data.write(str(heart_decision))
     
-    
-    # Registro del archivo de la simulación
-    with open(f'{filepath_to_save_name}/Heart decision.txt', 'w', encoding='utf8') as data:
-        data.write(f'{heart_decision}')
+    elif n_components > 2 or clustering:
+        if assign_method == 'auto':
+            # CRITERIO 1: Definición de la ubicación del diccionario
+            filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+            
+            # Definición de la carpeta a revisar
+            folder = f'{dir_file.split("/")[0]}'
+            
+            # Definición del nombre del archivo de sonidos cardiacos
+            heart_segments = f'{dir_file.split("/")[-1].strip(".wav").split(" ")[-1]}'
+            
+            # Definición de la ubicación de los segmentos de sonido cardiaco de interés
+            if version == 1:
+                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                          f'{heart_segments} - segments.txt'
+            else:
+                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                          f'{ausc_zone}/{heart_segments} - segments.txt'
+            
+            # Aplicación de los criterios
+            ## CRITERIO 1: Correlación espectral
+            a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
+                                                    N=N, noverlap=noverlap, 
+                                                    n_comps_dict=4, beta=beta, 
+                                                    filepath_data=filepath_dict, 
+                                                    padding=padding, repeat=repeat, 
+                                                    measure=measure_spect_crit, 
+                                                    i_selection=i_selection, threshold='mean')
+            
+            ## CRITERIO 2: Centroide espectral
+            a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+            
+            ## CRITERIO 3: Correlación temporal
+            a3_bool, a3 = temporal_correlation_test(H, filename_heart_segments, samplerate, 
+                                                    samplerate_des, N=N, N_audio=len(signal_in), 
+                                                    noverlap=noverlap, threshold='mean', 
+                                                    measure=measure_temp_crit, 
+                                                    H_binary=H_binary, reduce_to_H=reduce_to_H,
+                                                    version=version, ausc_zone=ausc_zone)
+            
+            # Decisión final
+            if dec_criteria == 'or':
+                heart_dec = a1_bool | a2_bool | a3_bool
+            elif dec_criteria == 'vote':
+                heart_dec = (a1_bool.astype(int) + a2_bool.astype(int) + 
+                             a3_bool.astype(int)) >= 2
+            elif dec_criteria == 'and':
+                heart_dec = a1_bool & a2_bool & a3_bool
+            
+            # Definición de las señales a grabar
+            heart_comps = np.zeros(len(comps[0]))
+            resp_comps = np.zeros(len(comps[0]))
+            
+            # Finalmente, grabando los archivos
+            for num_comp, dec in enumerate(heart_dec):
+                # Grabando cada componente
+                if dec:
+                    heart_comps += comps[num_comp]
+                else:
+                    resp_comps += comps[num_comp]
+            
+            # Definición del texto a guardar
+            save_txt = ' clustering'
+            
+            # Para conectarlas adecuadamente a la señal de interés
+            for num_int, interval in enumerate(interval_list, 1):
+                # Definición del límite inferior y superior
+                lower = (interval[0] - N_lax) // sr_ratio
+                upper = (interval[1] + N_lax) // sr_ratio
+
+                # Graficando los segmentos
+                _plot_masked_segments_nmf_kmore(signal_to, heart_comps, resp_comps, lower, 
+                                                upper, N_fade, num_int, filepath_to_save_name)
+                
+                # Definición de la lista de señales a concatenar con fading para el corazón
+                heart_connect = (heart_signal[:lower], 
+                                 heart_comps[lower - N_fade:upper + N_fade], 
+                                 heart_signal[upper:])
+                # Definición de la lista de señales a concatenar con fading para la respiración
+                resp_connect = (resp_signal[:lower], 
+                                resp_comps[lower - N_fade:upper + N_fade], 
+                                resp_signal[upper:])
+
+                # plt.plot(range(0,lower), resp_signal[:lower], color='C0', zorder=2)
+                # plt.plot(range(lower - N_fade,upper + N_fade), 
+                # comps[resp_decision][lower - N_fade:upper + N_fade], color='C1', zorder=2)
+                # plt.plot(range(upper, len(resp_signal)), resp_signal[upper:], color='C2', zorder=2)
+                # plt.plot(resp_signal, linewidth=5, color='C3', zorder=1)
+                
+                # Aplicando fading para cada uno
+                heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
+                resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
+            
+            # Graficar
+            _plot_clustering_points(filepath_to_save_name, a1, a2, a3, 
+                                    measure_temp_crit)
+        
+        elif assign_method == 'labeled':
+            pass
     
     # Finalmente, grabando los archivos de audio
-    sf.write(f'{filepath_to_save_name}/Respiratory signal.wav', resp_signal, samplerate)
-    sf.write(f'{filepath_to_save_name}/Heart signal.wav', heart_signal, samplerate)
+    sf.write(f'{filepath_to_save_name}/Respiratory signal{save_txt}.wav', 
+                resp_signal, samplerate_des)
+    sf.write(f'{filepath_to_save_name}/Heart signal{save_txt}.wav', 
+                heart_signal, samplerate_des)
     
     return resp_signal, heart_signal
 
@@ -1975,7 +2261,7 @@ def _decision_question_in_comps(n_components):
     return decision
 
 
-def _plot_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
+def _plot_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assign_method):
     # Definición de la clase que usará el bóton para regular las funciones
     class Boton_seleccion:
         ''' Clase que permitirá controlar la variable de interés y los métodos
@@ -2003,34 +2289,40 @@ def _plot_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
     plt.switch_backend('TkAgg')
     
     # Creación del plot
-    fig, ax = plt.subplots(2, 2, figsize=(17,7))
+    fig, ax = plt.subplots(2, 2, figsize=(17,10))
     
     # Plots
     ax[0][0].plot(signal_in, label='Original')
     ax[0][0].legend(loc='upper right')
-    ax[0][0].set_title('Señal original')
+    ax[0][0].set_title('Original signal')
+    ax[0][0].set_xlabel('Samples')
     
-    ax[1][0].plot(comps[0], label='Comp 1')
-    ax[1][0].plot(comps[1], label='Comp 2')
+    ax[1][0].plot(comps[0], label='Comp 1', color='C0')
+    ax[1][0].plot(comps[1], label='Comp 2', color='C1')
     ax[1][0].legend(loc='upper right')
-    ax[1][0].set_title('Señal original')
+    ax[1][0].set_title('NMF components')
+    ax[1][0].set_xlabel('Samples')
     
-    ax[0][1].plot(W[:,0], label='Comp 1')
-    ax[0][1].plot(W[:,1], label='Comp 2')
+    f = np.linspace(0, samplerate // 2, W.shape[0])
+    ax[0][1].plot(f, W[:,0], label='Comp 1', color='C0')
+    ax[0][1].plot(f, W[:,1], label='Comp 2', color='C1')
     ax[0][1].legend(loc='upper right')
-    ax[0][1].set_xlim([0,100])
-    ax[0][1].set_title('Matriz W')
+    ax[0][1].set_xlim([0,1000])
+    ax[0][1].set_title('Matrix W')
+    ax[0][1].set_xlabel('Frequency [Hz]')
     
-    ax[1][1].plot(H[0], label='Comp 1')
-    ax[1][1].plot(H[1], label='Comp 2')
+    t = np.linspace(0, len(signal_in), H.shape[1])
+    ax[1][1].plot(t, H[0], label='Comp 1', color='C0')
+    ax[1][1].plot(t, H[1], label='Comp 2', color='C1')
     ax[1][1].legend(loc='upper right')
-    ax[1][1].set_title('Matriz H')
+    ax[1][1].set_title('Matrix H')
+    ax[1][1].set_xlabel('Samples')
     
     # Definición del título
-    fig.suptitle(f'NMF decomposition')
+    # fig.suptitle(f'NMF decomposition')
     
     # Se guarda la figura
-    fig.savefig(f'{filepath_to_save}/Plot.png') 
+    fig.savefig(f'{filepath_to_save}/Signal plot.png') 
     
     if assign_method == 'manual':
         # Manager para modificar la figura actual y maximizarla
@@ -2063,7 +2355,8 @@ def _plot_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
         
         if to_return is None:
             print('Seleccione una opción...')
-            return _plot_nmf(signal_in, comps, W, H, filepath_to_save, assign_method)
+            return _plot_nmf(signal_in, samplerate, comps, W, H, 
+                             filepath_to_save, assign_method)
         else:
             return to_return 
 
@@ -2109,7 +2402,7 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
     ax[0].plot(t, comps[1], label='Comp 2', color='C1')
     ax[0].set_xlabel('Samples')
     ax[0].legend(loc='upper right')
-    ax[0].set_title('Señales')
+    ax[0].set_title('Signals')
     ax[0].tick_params(axis='x', labelrotation=45)
     
     f = np.linspace(0, samplerate // 2, W.shape[0])
@@ -2118,14 +2411,14 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
     ax[1].legend(loc='upper right')
     ax[1].set_xlim([0,1000])
     ax[1].set_xlabel('Frequency [Hz]')
-    ax[1].set_title('Matriz W')
+    ax[1].set_title('Matrix W')
     
     t = np.linspace(lower - N_fade, upper + N_fade, H.shape[1])
     ax[2].plot(t, H[0], label='Comp 1', color='C0')
     ax[2].plot(t, H[1], label='Comp 2', color='C1')
     ax[2].set_xlabel('Samples')
     ax[2].legend(loc='upper right')
-    ax[2].set_title('Matriz H')
+    ax[2].set_title('Matrix H')
     ax[2].tick_params(axis='x', labelrotation=45)
     
     # Definición del título
@@ -2172,7 +2465,33 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
             return to_return 
 
 
-def _plot_masked_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
+def _plot_segments_nmf_kmore(signal_in, heart_comps, resp_comps, N_fade, 
+                             lower, upper, num, filepath_to_save):
+    '''Función auxiliar que permite realizar los gráficos en la función
+    "nmf_applied_interest_segments".
+    '''
+    # Creación de la figura
+    plt.figure(figsize=(17,9))
+    
+     # Graficando cada segmento de la señal
+    plt.plot(range(lower - N_fade, upper + N_fade), 
+             signal_in[lower - N_fade:upper + N_fade],
+             linewidth=3, zorder=1, color='C2', label='Original')
+    plt.plot(range(lower - N_fade, upper + N_fade), heart_comps, 
+             color='C0', zorder=2, label='Heart')
+    plt.plot(range(lower - N_fade,upper + N_fade), resp_comps, 
+             color='C1', zorder=2, label='Respiration')
+    
+    # Labels y títulos
+    plt.xlabel('Samples')
+    plt.ylabel('Signals')
+    plt.legend(loc='upper right')
+    plt.suptitle(f'Segment #{num}')
+    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.png')
+    plt.close()
+
+
+def _plot_masked_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assign_method):
     '''Función auxiliar que permite realizar los gráficos en la función
     "nmf_applied_masked_segments".
     '''
@@ -2203,32 +2522,37 @@ def _plot_masked_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
     plt.switch_backend('TkAgg')
     
     # Creación del plot
-    fig, ax = plt.subplots(1, 3, figsize=(17,7))
+    fig, ax = plt.subplots(2, 2, figsize=(17,10))
     
     # Plots
-    ax[0].plot(signal_in, label='Original', linewidth=3, color='C2', zorder=1)
-    ax[0].plot(comps[0], label='Comp 1', color='C0', zorder=2)
-    ax[0].plot(comps[1], label='Comp 2', color='C1', zorder=2)
-    ax[0].legend(loc='upper right')
-    ax[0].set_title('Señales')
+    ax[0][0].plot(signal_in, label='Original')
+    ax[0][0].legend(loc='upper right')
+    ax[0][0].set_title('Original signal')
+    ax[0][0].set_xlabel('Samples')
     
-    ax[1].axvline(centroide(W[:,0]), ymin=min(W[:,0]), ymax=max(W[:,0]), color='b',
-                  label='Centroide Comp 1')
-    ax[1].axvline(centroide(W[:,1]), ymin=min(W[:,1]), ymax=max(W[:,1]), color='r',
-                  label='Centroide Comp 2')
-    ax[1].plot(W[:,0], label='Comp 1', color='C0')
-    ax[1].plot(W[:,1], label='Comp 2', color='C1')
-    ax[1].legend(loc='upper right')
-    ax[1].set_xlim([0,100])
-    ax[1].set_title('Matriz W')
+    ax[1][0].plot(comps[0], label='Comp 1', color='C0')
+    ax[1][0].plot(comps[1], label='Comp 2', color='C1')
+    ax[1][0].legend(loc='upper right')
+    ax[1][0].set_title('NMF components')
+    ax[1][0].set_xlabel('Samples')
     
-    ax[2].plot(H[0], label='Comp 1')
-    ax[2].plot(H[1], label='Comp 2')
-    ax[2].legend(loc='upper right')
-    ax[2].set_title('Matriz H')
+    f = np.linspace(0, samplerate // 2, W.shape[0])
+    ax[0][1].plot(f, W[:,0], label='Comp 1', color='C0')
+    ax[0][1].plot(f, W[:,1], label='Comp 2', color='C1')
+    ax[0][1].legend(loc='upper right')
+    ax[0][1].set_xlim([0,1000])
+    ax[0][1].set_title('Matrix W')
+    ax[0][1].set_xlabel('Frequency [Hz]')
+    
+    t = np.linspace(0, len(signal_in), H.shape[1])
+    ax[1][1].plot(t, H[0], label='Comp 1', color='C0')
+    ax[1][1].plot(t, H[1], label='Comp 2', color='C1')
+    ax[1][1].legend(loc='upper right')
+    ax[1][1].set_title('Matrix H')
+    ax[1][1].set_xlabel('Samples')
     
     # Definición del título
-    fig.suptitle(f'Complete signal')
+    # fig.suptitle(f'Signal plots')
     
     # Se guarda la figura
     fig.savefig(f'{filepath_to_save}/Signal plot.png') 
@@ -2264,7 +2588,7 @@ def _plot_masked_nmf(signal_in, comps, W, H, filepath_to_save, assign_method):
         
         if to_return is None:
             print('Seleccione una opción...')
-            return _plot_masked_nmf(signal_in, comps, W, H, 
+            return _plot_masked_nmf(signal_in, samplerate, comps, W, H, 
                                     filepath_to_save, assign_method)
         else:
             return to_return 
@@ -2295,6 +2619,70 @@ def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision,
     plt.legend(loc='upper right')
     plt.suptitle(f'Segment #{num}')
     plt.savefig(f'{filepath_to_save}/Segment #{num}.png')
+    plt.close()
+
+
+def _plot_masked_segments_nmf_kmore(signal_in, heart_comps, resp_comps, lower, upper, 
+                                    N_fade, num, filepath_to_save):
+    '''Función auxiliar que permite guardar las imágenes de cada segmento en la 
+    función "nmf_applied_masked_segments" cuando k >= 2.
+    '''
+    # Creación de la figura
+    plt.figure(figsize=(17,9))
+    
+     # Graficando cada segmento de la señal
+    plt.plot(range(lower - N_fade, upper + N_fade), 
+             signal_in[lower - N_fade:upper + N_fade],
+             linewidth=3, zorder=1, color='C2', label='Original')
+    plt.plot(range(lower - N_fade, upper + N_fade), 
+             heart_comps[lower - N_fade:upper + N_fade], 
+             color='C0', zorder=2, label='Heart')
+    plt.plot(range(lower - N_fade,upper + N_fade), 
+             resp_comps[lower - N_fade:upper + N_fade], 
+             color='C1', zorder=2, label='Respiration')
+    
+    # Labels y títulos
+    plt.xlabel('Samples')
+    plt.ylabel('Signals')
+    plt.legend(loc='upper right')
+    plt.suptitle(f'Segment #{num}')
+    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.png')
+    plt.close()
+
+
+def _plot_clustering_points(filepath, spec_coef, cent_coef, temp_coef, 
+                            measure_temp_crit):
+    # Propiedades de etiquetas
+    if measure_temp_crit == 'q_equal':
+        text_temp_crit = 'Equal Percentage (%)'
+    elif measure_temp_crit == 'correlation':
+        text_temp_crit = 'Correlation'
+    
+    plt.figure()
+    plt.plot(spec_coef, 'bx')
+    plt.axhline(np.mean(spec_coef), color='r')
+    plt.xlabel('Component (i)')
+    plt.ylabel('Correlation')
+    plt.title('Spectral criteria')
+    plt.savefig(f'{filepath}/Spectral criteria.png')
+    plt.close()
+    
+    plt.figure()
+    plt.plot(cent_coef, 'bx')
+    plt.axhline(np.mean(cent_coef), color='r')
+    plt.xlabel('Component (i)')
+    plt.ylabel('Centroid')
+    plt.title('Centroid criteria')
+    plt.savefig(f'{filepath}/Centroid criteria.png')
+    plt.close()
+    
+    plt.figure()
+    plt.plot(temp_coef, 'bx')
+    plt.axhline(np.mean(temp_coef), color='r')
+    plt.xlabel('Component (i)')
+    plt.ylabel(f'{text_temp_crit}')
+    plt.title('Temporal criteria')
+    plt.savefig(f'{filepath}/Temporal criteria.png')
     plt.close()
 
 

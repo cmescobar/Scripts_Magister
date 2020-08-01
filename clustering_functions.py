@@ -109,7 +109,10 @@ def temporal_correlation_criteria(H_i, P, measure='correlation', H_binary=True,
     P : ndarray
         Heart rate de la señal cardiorespiratoria.
     measure : {'correlation', 'q_equal'}, optional
-        
+        Tipo de métrica para realizar la clasificación. 'correlation' calcula la
+        correlación entre el heart rate y el H de cada componente. 'q_equal'
+        calcula el porcentaje de puntos iguales en ambas representaciones.
+        Por defect es 'correlation'. 
     H_binary : bool, optional
         Valor del umbral de decisión de la para clasificar una componente como
         sonido cardíaco. Por defecto es 0.
@@ -295,7 +298,15 @@ def temporal_correlation_test(H, filename, samplerate_original, samplerate_signa
     threshold : float, optional
         Valor del umbral de decisión para clasificar una componente de la matriz
         H como sonido cardíaco. Por defecto es 0.
-        
+    measure : {'correlation', 'q_equal'}, optional
+        Tipo de métrica para realizar la clasificación. 'correlation' calcula la
+        correlación entre el heart rate y el H de cada componente. 'q_equal'
+        calcula el porcentaje de puntos iguales en ambas representaciones.
+        Por defect es 'correlation'. 
+    H_binary : bool, optional
+        Valor del umbral de decisión de la para clasificar una componente como
+        sonido cardíaco. Por defecto es 0.
+    
     Referencias
     -----------
     [1] Canadas-Quesada, et. al (2017). A non-negative matrix factorization 
@@ -328,7 +339,8 @@ def temporal_correlation_test(H, filename, samplerate_original, samplerate_signa
     for i in range(H.shape[0]):
         # Si es que se quiere hacer en la dimension de P, se debe hacer un resample
         if not reduce_to_H:
-            h_interest = resampling_by_points(H[i], samplerate_signal, N_desired=len(P),
+            h_interest = resampling_by_points(H[i], samplerate_signal, 
+                                              N_desired=len(P),
                                               normalize=True)
         else:
             h_interest = H[i]
@@ -346,6 +358,113 @@ def temporal_correlation_test(H, filename, samplerate_original, samplerate_signa
         threshold = np.mean(TC_i_array)
     
     return TC_i_array >= threshold, TC_i_array
+
+
+def temporal_correlation_test_segment(H, lower, upper, N_fade, N_lax, 
+                                      samplerate_signal, threshold=0, 
+                                      measure='correlation', H_binary=True, 
+                                      reduce_to_H=False):
+    '''Función que permite realizar un testeo de cada componente de la matriz
+    H en comparación con el heart rate obtenido a partir de la señal original.
+    Retorna un arreglo de booleanos. Si la entrada i es True, se trata de un
+    sonido cardíaco. Si es False, se trata de un sonido respiratorio.
+    
+    Parameters
+    ----------
+    H : ndarray
+        Matriz H de la descomposición NMF.
+    lower : int
+        Índice inferior del segmento.
+    upper : int
+        Índice superior del segmento.
+    N_fade : int
+        Cantidad de puntos de fade.
+    threshold : float, optional
+        Valor del umbral de decisión para clasificar una componente de la matriz
+        H como sonido cardíaco. Por defecto es 0.
+    measure : {'correlation', 'q_equal'}, optional
+        Tipo de métrica para realizar la clasificación. 'correlation' calcula la
+        correlación entre el heart rate y el H de cada componente. 'q_equal'
+        calcula el porcentaje de puntos iguales en ambas representaciones.
+        Por defect es 'correlation'. 
+    H_binary : bool, optional
+        Valor del umbral de decisión de la para clasificar una componente como
+        sonido cardíaco. Por defecto es 0.
+    
+    Referencias
+    -----------
+    [1] Canadas-Quesada, et. al (2017). A non-negative matrix factorization 
+        approach  based on spectro-temporal clustering to extract heart sounds. 
+        Applied Acoustics. Elsevier. Chapter 3.2.3.
+    '''
+    # Definición del heart rate en ese segmento
+    P = np.array([0] * (N_fade + N_lax) + 
+                 [1] * abs(upper - lower - 2 * N_lax) + 
+                 [0] * (N_fade + N_lax))
+        
+    # Definición de la lista de booleanos de salida
+    TC_i_list = list()
+    
+    for i in range(H.shape[0]):
+        # Si es que se quiere hacer en la dimension de P, se debe hacer un resample
+        if not reduce_to_H:
+            h_interest = resampling_by_points(H[i], samplerate_signal, 
+                                              N_desired=len(P),
+                                              normalize=True)
+        else:
+            h_interest = H[i]
+        
+        # Aplicando el criterio
+        TC_i = temporal_correlation_criteria(h_interest, P, measure=measure, 
+                                             H_binary=H_binary)
+        # Agregando
+        TC_i_list.append(TC_i)
+    
+    # Pasando a array
+    TC_i_array = np.array(TC_i_list)
+    
+    if threshold == 'mean':
+        threshold = np.mean(TC_i_array)
+    
+    return TC_i_array >= threshold, TC_i_array
+
+
+def centroid_test(W, limit='upper', gamma=1):
+    '''Criterio de centroide propuesto.
+    
+    Parameters
+    ----------
+    W : ndarray
+        Matriz de plantillas espectrales W del NMF.
+    limit : {'upper', 'mean_range'}, float, optional
+        Tipo de límite utilizado para clasificar las componetntes. 'upper' 
+        clasifica como corazón a las componentes cuyas centroides estén 
+        sobre el promedio. 'mean_range' clasifica como corazón a las 
+        componentes que se encuentren en el rango mu +- gamma*sigma. Se puede 
+        utilizar un float como límite específico también. Por defecto es 
+        'upper'.
+    gamma : float, optional
+        Factor de ponderación de sigma en el criterio "mean_range" del 
+        parámetro limit. Por defecto es 1.
+    '''
+    # Cálculo de los centroides de la matriz W
+    centroid_W = np.matmul(W.T, np.arange(0, W.shape[0])) / W.sum(axis=0)
+    
+    # Cálculo de la media del centroide
+    mu_c = centroid_W.mean()
+    sd_c = centroid_W.std()
+    
+    if limit == 'upper':
+        # Para valores mayores -> corazón. Caso contrario -> pulmón
+        bool_out = centroid_W >= mu_c
+    elif limit == 'mean_range':
+        # Para valores dentro del rango, es corazón. Fuera es pulmón
+        bool_out = (mu_c - gamma * sd_c <= centroid_W) & \
+                   (centroid_W <= mu_c + gamma * sd_c)
+    else:
+        bool_out = centroid_W <= limit
+        
+    return bool_out, centroid_W
 
 
 def get_heart_rate(filename, samplerate_original, samplerate_signal, N, N_audio,

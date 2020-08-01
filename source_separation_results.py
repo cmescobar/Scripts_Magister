@@ -13,34 +13,61 @@ from filter_and_sampling import downsampling_signal
 from source_separation import nmf_applied_all, get_components_HR_sounds
 
 
-def generate_results(ausc_zone='Anterior', sep_type='on segments'):
+def generate_results(sep_type='on segments', ausc_zone='Anterior'):
     # Parametros de separación
     N = 1024
-    noverlap = int(0.9 * N)
-    n_components = 2
+    noverlap = int(0.75 * N)
+    n_components = 10
     padding = 3 * N
-    repeat = 0
+    repeat = 0 # 4
     sr_des = 44100 // 4
     window = 'hann'
+    N_lax = 100
+    N_fade = 100
+    l1_ratio = 0    # 1
+    alpha = 0       # 0.03
+    assign_method = 'auto'
+    clustering = True
+    dec_criteria = 'vote'
+    H_binary = False
     
     # Definición filepath
     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
                 'Seed-0 - x - 0.5_Heart 0.5_Resp 0_White noise'
+    
+    get_components_HR_sounds(filepath, sr_des, sep_type=sep_type, assign_method=assign_method, 
+                            clustering=clustering, n_components=n_components, N=N, 
+                            N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+                            padding=padding, repeat=repeat, window=window, 
+                            whole=False, alpha_wiener=1, filter_out='wiener', 
+                            init='random', solver='mu', beta=2, tol=1e-4, max_iter=1000, 
+                            alpha_nmf=alpha, l1_ratio=l1_ratio, random_state=0, 
+                            W_0=None, H_0=None, plot_segments=True, scale='abs', 
+                            ausc_zone=ausc_zone, fcut_spect_crit=200, 
+                            measure_spect_crit='correlation', i_selection='max', 
+                            f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
+                            H_binary=H_binary, reduce_to_H=False, dec_criteria=dec_criteria)
+    
+    # for dB in range(-9, 12, 3):
+    #     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
+    #                f'Seed-0 - ({dB}dB) [Resp-Heart]'
 
-    get_components_HR_sounds(filepath, sr_des, sep_type=sep_type, assign_method='manual', 
-                             clustering=False, n_components=n_components, N=N, N_lax=200, N_fade=200, 
-                             noverlap=noverlap, padding=padding, repeat=repeat, window=window, 
-                             whole=False, alpha_wiener=1, filter_out='wiener', 
-                             init='random', solver='mu', beta=2, tol=1e-4, max_iter=1000, 
-                             alpha_nmf=0, l1_ratio=0, random_state=0, 
-                             W_0=None, H_0=None, plot_segments=True, scale='abs', 
-                             ausc_zone=ausc_zone, fcut_spect_crit=200, 
-                             measure_spect_crit='correlation', i_selection='max', f1_roll=20, 
-                             f2_roll=150, measure_temp_crit='q_equal', H_binary=True, 
-                             reduce_to_H=False, dec_criteria='or')
+    #     get_components_HR_sounds(filepath, sr_des, 
+    #                              sep_type=sep_type, assign_method=assign_method, 
+    #                             clustering=False, n_components=n_components, N=N, 
+    #                             N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+    #                             padding=padding, repeat=repeat, window=window, 
+    #                             whole=False, alpha_wiener=1, filter_out='wiener', 
+    #                             init='random', solver='mu', beta=2, tol=1e-4, max_iter=1000, 
+    #                             alpha_nmf=alpha, l1_ratio=l1_ratio, random_state=0, 
+    #                             W_0=None, H_0=None, plot_segments=True, scale='abs', 
+    #                             ausc_zone=ausc_zone, fcut_spect_crit=200, 
+    #                             measure_spect_crit='correlation', i_selection='max', 
+    #                             f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
+    #                             H_binary=True, reduce_to_H=False, dec_criteria='or')
 
 
-def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Anterior'):
+def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Both'):
     # Parámetros
     sr_des = 44100 // 4
     
@@ -54,6 +81,8 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Anterior'
         filepath = f'{filepath}/Separation to all'
     elif sep_type == 'on segments':
         filepath = f'{filepath}/Separation on segments'
+    elif sep_type == 'masked segments':
+        filepath = f'{filepath}/Masking on segments'
     else:
         raise Exception('Opción para "sep_type" no válido.')
     
@@ -106,13 +135,14 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Anterior'
         if sep_type == 'to all':
             resp_comp, _ = sf.read(f'{filepath}/{name_i}/ Respiratory Sound.wav')
             heart_comp, _ = sf.read(f'{filepath}/{name_i}/ Heart Sound.wav')
-        elif sep_type == 'on segments':
+        elif sep_type in ['on segments', 'masked segments']:
             resp_comp, _ = sf.read(f'{filepath}/{name_i}/Respiratory signal.wav')
             heart_comp, _ = sf.read(f'{filepath}/{name_i}/Heart signal.wav')
         
         # Seleccionando el largo más corto de cada uno (para hacer un punto a punto)
         minlen_resp = min(len(resp_to), len(resp_comp))
         minlen_heart = min(len(heart_to), len(heart_comp))
+        minlen_to = min(len(resp_to),len(heart_to))
         
         # Recorte
         resp_to = resp_to[:minlen_resp]
@@ -136,7 +166,8 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Anterior'
         
         # Cálculo HNRP
         hnrp = evmet.HNRP(resp_to, resp_comp)
-        performance = evmet.performance_HNRP(hnrp, 0.5)
+        performance = evmet.performance_HNRP(hnrp, heart_to[:minlen_to], 
+                                             (heart_to[:minlen_to] + resp_to[:minlen_to]))
         
         # Cálculo de correlación psd
         correlation_resp = evmet.psd_correlation(resp_to, resp_comp, sr_des, window=window, N=N,
@@ -229,6 +260,8 @@ def evaluate_results(sep_type='to all', version=2, ausc_zone='Anterior'):
         filepath = f'{filepath}/Separation to all'
     elif sep_type == 'on segments':
         filepath = f'{filepath}/Separation on segments'
+    elif sep_type == 'masked segments':
+        filepath = f'{filepath}/Masking on segments'
     else:
         raise Exception('Opción para "sep_type" no válido.')
     
@@ -419,16 +452,24 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
 def compare_results(to_analyze='Respiration', ausc_zone='Anterior'):
     # Parametros de separación
     N = 1024
-    noverlap = int(0.9 * N)
+    noverlap = int(0.95 * N)
     n_components = 2
     padding = 3 * N
     repeat = 0
     window = 'hann'
+    N_lax = 100
+    N_fade = 100
+    l1_ratio = 0
+    alpha_nmf = 0
+    
+    # Definición del nombre de las propiedades
+    prop_name = f'N{N}_noverlap{noverlap}_ncomps{n_components}_padding{padding}'\
+                f'repeat{repeat}_window-{window}_l1_ratio{l1_ratio}_alphaNMF{alpha_nmf}'
     
     # Definición filepath
     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
                 'Seed-0 - x - 0.5_Heart 0.5_Resp 0_White noise/Components'
-    
+
     # Id's que cumplen  los parámetros
     with open(f'{filepath}/Separation to all/Simulation register.txt', 
               'r', encoding='utf8') as file:
@@ -441,7 +482,9 @@ def compare_results(to_analyze='Respiration', ausc_zone='Anterior'):
                 dict_to_all['n_components'] == n_components and 
                 dict_to_all['padding'] == padding and 
                 dict_to_all['repeat'] == repeat and
-                dict_to_all['window'] == window):
+                dict_to_all['window'] == window and
+                dict_to_all['l1_ratio'] == l1_ratio and
+                dict_to_all['alpha_nmf'] == alpha_nmf):
                 id_to_all = dict_to_all['id']
                 break
     
@@ -456,15 +499,42 @@ def compare_results(to_analyze='Respiration', ausc_zone='Anterior'):
                 dict_on_seg['n_components'] == n_components and 
                 dict_on_seg['padding'] == padding and 
                 dict_on_seg['repeat'] == repeat and
-                dict_on_seg['window'] == window):
+                dict_on_seg['window'] == window and
+                dict_on_seg['l1_ratio'] == l1_ratio and
+                dict_on_seg['alpha_nmf'] == alpha_nmf and
+                dict_on_seg['N_lax'] == N_lax and
+                dict_on_seg['N_fade'] == N_fade):
                 id_on_segments = dict_on_seg['id']
+                break
     
+    with open(f'{filepath}/Masking on segments/Simulation register.txt', 
+              'r', encoding='utf8') as file:
+        for line in file:
+            dict_mask_seg = literal_eval(line.strip())
+            
+            # Para separation on segments
+            if (dict_mask_seg['N'] == N and 
+                dict_mask_seg['noverlap'] == noverlap and
+                dict_mask_seg['n_components'] == n_components and 
+                dict_mask_seg['padding'] == padding and 
+                dict_mask_seg['repeat'] == repeat and
+                dict_mask_seg['window'] == window and
+                dict_mask_seg['l1_ratio'] == l1_ratio and
+                dict_mask_seg['alpha_nmf'] == alpha_nmf and
+                dict_mask_seg['N_lax'] == N_lax and
+                dict_mask_seg['N_fade'] == N_fade):
+                id_mask_segments = dict_mask_seg['id']
+                break
+    
+    # Prints
     print(f'id to all: {id_to_all}')
     print(f'id on segments: {id_on_segments}')
+    print(f'id mask segments: {id_mask_segments}')
     
     # Definición de las direcciones con la id
     filepath_to_all = f'{filepath}/Separation to all/id {id_to_all}'
     filepath_on_segments = f'{filepath}/Separation on segments/id {id_on_segments}'
+    filepath_mask_segments = f'{filepath}/Masking on segments/id {id_mask_segments}'
     
     # Definción de las listas de listas
     mse_total = list()
@@ -559,64 +629,149 @@ def compare_results(to_analyze='Respiration', ausc_zone='Anterior'):
         p_total.append(p_list)
         error_total.append(error_list)
     
+    with open(f'{filepath_mask_segments}/Result Analysis - {to_analyze}.txt', 
+              'r', encoding='utf8') as file:
+        # Definición de las listas a realizar (común)
+        mse_list = list()
+        nmse_list = list()
+        rmse_list = list()
+        sdr_list = list()
+        psd_list = list()
+        error_list = list()
+        
+        # Listas solo para respiración
+        hnrp_list = list()
+        p_list = list()
+                
+        for line in file:
+            # Diccionario de información
+            dict_to_rev = literal_eval(line.strip())
+            
+            # Agregando a las listas
+            mse_list.append(float(dict_to_rev['mse']))
+            nmse_list.append(float(dict_to_rev['nmse']))
+            rmse_list.append(float(dict_to_rev['rmse']))
+            sdr_list.append(float(dict_to_rev['SDR']))
+            psd_list.append(float(dict_to_rev['psd_correlation']))
+            error_list.append(float(dict_to_rev['sum error']))
+            
+            if to_analyze == 'Respiration':
+                hnrp_list.append(float(dict_to_rev['HNRP']))
+                p_list.append(float(dict_to_rev['p(%)']))
+        
+        # Agregar a la lista de listas
+        mse_total.append(mse_list)
+        nmse_total.append(nmse_list)
+        rmse_total.append(rmse_list)
+        sdr_total.append(sdr_list)
+        psd_total.append(psd_list)
+        hnrp_total.append(hnrp_list)
+        p_total.append(p_list)
+        error_total.append(error_list)
+    
+    
+    # Definición de la dirección a guardar los resultados
+    filepath_to_save = f'{filepath}/Results/{prop_name}'
+    
+    # Creación de la carpeta donde se almacenarán los resultados
+    if not os.path.isdir(filepath_to_save):
+        os.makedirs(filepath_to_save)
+    
     # Creación de diagramas de caja
     plt.boxplot(mse_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('MSE')
     plt.title(f'{to_analyze} MSE Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} mse_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} mse_boxplot.png')
     plt.close()
     
     plt.boxplot(nmse_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('NMSE')
     plt.title(f'{to_analyze} NMSE Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} nmse_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} nmse_boxplot.png')
     plt.close()
     
     plt.boxplot(rmse_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('RMSE')
     plt.title(f'{to_analyze} RMSE Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} rmse_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} rmse_boxplot.png')
     plt.close()
     
     plt.boxplot(error_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('Error')
     plt.title(f'{to_analyze} Error total Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} Error_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} Error_boxplot.png')
     plt.close()
     
     plt.boxplot(sdr_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('SDR')
     plt.title(f'{to_analyze} SDR Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} sdr_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} sdr_boxplot.png')
     plt.close()
     
     plt.boxplot(psd_total)
-    plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+    plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
     plt.ylabel('PSD')
     plt.title(f'{to_analyze} PSD Boxplot')
-    plt.savefig(f'{filepath}/{to_analyze} psd_boxplot.png')
+    plt.savefig(f'{filepath_to_save}/{to_analyze} psd_boxplot.png')
     plt.close()
     
     if to_analyze == 'Respiration':
         plt.boxplot(hnrp_total)
-        plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+        plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
         plt.ylabel('HNRP')
         plt.title(f'{to_analyze} HNRP Boxplot')
-        plt.savefig(f'{filepath}/{to_analyze} hnrp_boxplot.png')
+        plt.savefig(f'{filepath_to_save}/{to_analyze} hnrp_boxplot.png')
         plt.close()
-        
+
         plt.boxplot(p_total)
-        plt.xticks([1, 2], ['NMF\nto all', 'NMF\non segments'])
+        plt.xticks([1, 2, 3], ['NMF to\nall', 'NMF on\nsegments', 'NMF masked\nsegments'])
         plt.ylabel('p(%)')
         plt.title(f'{to_analyze} p(%) Boxplot')
-        plt.savefig(f'{filepath}/{to_analyze} p_boxplot.png')
+        plt.savefig(f'{filepath_to_save}/{to_analyze} p_boxplot.png')
         plt.close()
     
+    with open(f'{filepath_to_save}/{to_analyze} Resume.txt', 'w', encoding='utf8') as file:
+        file.write(f'MSE all: {np.mean(mse_total[0])} +- {np.std(mse_total[0])}\n')
+        file.write(f'MSE seg: {np.mean(mse_total[1])} +- {np.std(mse_total[1])}\n')
+        file.write(f'MSE mask: {np.mean(mse_total[2])} +- {np.std(mse_total[2])}\n\n')
+        
+        file.write(f'NMSE all: {np.mean(nmse_total[0])} +- {np.std(nmse_total[0])}\n')
+        file.write(f'NMSE seg: {np.mean(nmse_total[1])} +- {np.std(nmse_total[1])}\n')
+        file.write(f'NMSE mask: {np.mean(nmse_total[2])} +- {np.std(nmse_total[2])}\n\n')
+        
+        file.write(f'RMSE all: {np.mean(rmse_total[0])} +- {np.std(rmse_total[0])}\n')
+        file.write(f'RMSE seg: {np.mean(rmse_total[1])} +- {np.std(rmse_total[1])}\n')
+        file.write(f'RMSE mask: {np.mean(rmse_total[2])} +- {np.std(rmse_total[2])}\n\n')
+        
+        file.write(f'Error all: {np.mean(error_total[0])} +- {np.std(error_total[0])}\n')
+        file.write(f'Error seg: {np.mean(error_total[1])} +- {np.std(error_total[1])}\n')
+        file.write(f'Error mask: {np.mean(error_total[2])} +- {np.std(error_total[2])}\n\n')
+        
+        file.write(f'HNRP all: {np.mean(hnrp_total[0])} +- {np.std(hnrp_total[0])}\n')
+        file.write(f'HNRP seg: {np.mean(hnrp_total[1])} +- {np.std(hnrp_total[1])}\n')
+        file.write(f'HNRP mask: {np.mean(hnrp_total[2])} +- {np.std(hnrp_total[2])}\n\n')
+        
+        file.write(f'p(%) all: {np.mean(p_total[0])} +- {np.std(p_total[0])}\n')
+        file.write(f'p(%) seg: {np.mean(p_total[1])} +- {np.std(p_total[1])}\n')
+        file.write(f'p(%) mask: {np.mean(p_total[2])} +- {np.std(p_total[2])}\n\n')
+        
+        file.write(f'PSD Correlation all: {np.mean(psd_total[0])} +- {np.std(psd_total[0])}\n')
+        file.write(f'PSD Correlation seg: {np.mean(psd_total[1])} +- {np.std(psd_total[1])}\n')
+        file.write(f'PSD Correlation mask: {np.mean(psd_total[2])} +- {np.std(psd_total[2])}\n\n')
+        
+        file.write(f'SDR all: {np.mean(sdr_total[0])} +- {np.std(sdr_total[0])}\n')
+        file.write(f'SDR seg: {np.mean(sdr_total[1])} +- {np.std(sdr_total[1])}\n')
+        file.write(f'SDR mask: {np.mean(sdr_total[2])} +- {np.std(sdr_total[2])}\n\n')
+        
+        file.write(f'Error all: {np.mean(nmse_total[0])} +- {np.std(nmse_total[0])}\n')
+        file.write(f'Error seg: {np.mean(nmse_total[1])} +- {np.std(nmse_total[1])}\n')
+        file.write(f'Error mask: {np.mean(nmse_total[2])} +- {np.std(nmse_total[2])}\n')
+
 
 def testing_module_1():
     # Parametros de separación
@@ -627,6 +782,7 @@ def testing_module_1():
     repeat = 4
     sr_des = 44100 // 4
     window = 'hann'
+    assign_method = 'manual'
     
     # Definición filepath
     filepath = 'Database_manufacturing/db_HR/Source Separation/v2/Anterior/'\
@@ -642,23 +798,34 @@ def testing_module_1():
     if not os.path.isdir(filepath_to_save_id):
         os.makedirs(filepath_to_save_id)
         
-    nmf_applied_all(dir_file, filepath_to_save_id, sr_des, clustering=False, n_components=n_components, 
-                    N=N, noverlap=noverlap, padding=padding, repeat=repeat, window=window, 
-                    whole=False, alpha_wiener=1, filter_out='wiener', init='random', 
-                    solver='cd', beta=2, tol=1e-4, max_iter=1000, alpha_nmf=0, l1_ratio=0, 
-                    random_state=0, W_0=None, H_0=None, scale='abs', version=2, ausc_zone='Anterior')
+    nmf_applied_all(dir_file, filepath_to_save_id, sr_des, assign_method, clustering=False, 
+                    n_components=n_components, N=N, noverlap=noverlap, padding=padding, 
+                    repeat=repeat, window=window, whole=False, alpha_wiener=1, 
+                    filter_out='wiener', init='random', solver='cd', beta=2, 
+                    tol=1e-4, max_iter=1000, alpha_nmf=0, l1_ratio=0, 
+                    random_state=0, W_0=None, H_0=None, scale='abs', version=2, 
+                    ausc_zone='Anterior')
 
 
 
+# generate_results(ausc_zone='Both', sep_type='to all')
 generate_results(ausc_zone='Both', sep_type='on segments')
-# evaluate_results(sep_type='on segments', version=2, ausc_zone='Both')
-# compare_results(to_analyze='Heart', ausc_zone='Both')
+# generate_results(ausc_zone='Both', sep_type='masked segments')
+
+# evaluate_results(sep_type='masked segments', version=2, ausc_zone='Both')
+# compare_results(to_analyze='Heart ', ausc_zone='Both')
+# compare_results(to_analyze='Respiration', ausc_zone='Both')
 
 
 
 """
-generate_results(ausc_zone='Anterior', sep_type='on segments')
-generate_results(ausc_zone='Anterior', sep_type='to all')
+generate_results(ausc_zone='Both', sep_type='to all')
+generate_results(ausc_zone='Both', sep_type='on segments')
+generate_results(ausc_zone='Both', sep_type='masked segments')
+
+evaluate_results(sep_type='to all', version=2, ausc_zone='Both')
+evaluate_results(sep_type='on segments', version=2, ausc_zone='Both')
+evaluate_results(sep_type='masked segments', version=2, ausc_zone='Both')
 
 resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, 
                         ausc_zone='Anterior')
@@ -666,11 +833,4 @@ resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2,
                         ausc_zone='Posterior')
 resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', version=2, 
                         ausc_zone='Anterior')
-
-evaluate_results(sep_type='to all', version=2, ausc_zone='Anterior')
-evaluate_results(sep_type='to all', version=2, ausc_zone='Posterior')
-evaluate_results(sep_type='on segments', version=2, ausc_zone='Anterior')
-
-evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Anterior')
-testing_module_1()
 """

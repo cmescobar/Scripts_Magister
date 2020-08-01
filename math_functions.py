@@ -288,6 +288,19 @@ def db_attenuation(signal_in, db):
     return signal_in * db_coef(-db)
 
 
+def _db_relation(signal_1, signal_2, db_rel_desired):
+    # Definición de la relación de energía entre señales
+    energy_ratio = sum(abs(signal_1) ** 2) / sum(abs(signal_2) ** 2)
+    
+    # Normalizando la señal 1 en relación a la energía de la señal 2
+    signal_1_norm = signal_1 / np.sqrt(energy_ratio)
+    
+    # Para que quede con los decibeles deseados
+    signal_1_db_des = db_attenuation(signal_1_norm, -db_rel_desired)
+    
+    return signal_1_db_des + signal_2
+    
+
 def _correlation(a, b):
     '''Función de correlación entre 2 series temporales.
     

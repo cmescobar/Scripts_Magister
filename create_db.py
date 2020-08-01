@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from itertools import product
 from matplotlib.lines import Line2D
-from math_functions import raised_cosine_modified, db_attenuation
+from math_functions import raised_cosine_modified, _db_relation
 from filter_and_sampling import resampling_by_points, downsampling_signal, upsampling_signal
 from source_separation import nmf_decomposition
 
@@ -639,7 +639,7 @@ def get_heart_sounds_by_name(name, filepath, N_periods=30, seed=0, beta=0.2,
         print('Completed!\n')
 
 
-def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', version=1, 
+def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', dB_value=0, version=1, 
                                  ausc_zone='Anterior', a_heart=1, a_resp=1, a_noise=0, seed=0):
     '''Rutina que permite crear los sonidos cardíacos + respiratorios en una carpeta, tomando como
     base los archivos disponibles en "dir_to_heart" y "db_respiratory/Original".
@@ -657,6 +657,9 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', v
         representan un factor de multiplicación para cada sonido normalizado: Para 'dB', 
         los coeficientes "a" representan los dB de atenuación aplicados a cada sonido.
         Por defecto es 'abs'.
+    dB_value : float, optional
+        Razón de dB que se desea entre el sonido respiratorio y el sonido cardiaco. Por
+        defecto es 0 dB.
     ausc_zone : {'Anterior', 'Posterior'}, optional
         Zona de auscultación del sonido a utilizar. Por defecto es 'Anterior'.
     version : int, optional
@@ -673,8 +676,11 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', v
         Semilla a utilizar para la creación del ruido blanco
     '''
     # Propiedades de ciertos parámetros
-    if ausc_zone not in ['Anterior', 'Posterior']:
+    if ausc_zone not in ['Anterior', 'Posterior', 'Both']:
         raise Exception('Opción para "ausc_zone" no válida.')
+    
+    if db_scale not in ['abs', 'dB']:
+        raise Exception('Opción para "dB_scale" no válida.')
     
     if version < 1:
         raise Exception('Opción para "version" no válida.')
@@ -702,26 +708,42 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', v
     # Lista de sonidos respiratorios
     resp_sounds = [i for i in os.listdir(dir_to_resp) if i.endswith('.wav')] 
     
-    # Definición de indicador de scala
-    scale_ind = 'dB' if db_scale == 'dB' else 'x'
-    
     if db_option == 'SS':
         if version == 1:
-            # Definición del directorio donde se guardará
-            folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}'\
-                    f'Seed-{seed} - {scale_ind} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+            if db_scale == 'abs':
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}/'\
+                              f'Seed-{seed} - x - {a_heart}_Heart {a_resp}_Resp '\
+                              f'{a_noise}_White noise'
+            else:
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}/'\
+                              f'Seed-{seed} - ({dB_value}dB) [Resp-Heart]'
         else:
-            # Definición del directorio donde se guardará
-            folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}/{ausc_zone}/'\
-                    f'Seed-{seed} - {scale_ind} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+            if db_scale == 'abs':
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}/{ausc_zone}/'\
+                              f'Seed-{seed} - x - {a_heart}_Heart {a_resp}_Resp '\
+                              f'{a_noise}_White noise'
+            else:
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Source Separation/v{version}/{ausc_zone}/'\
+                              f'Seed-{seed} - ({dB_value}dB) [Resp-Heart]'
         
         # Definición de las posibles combinaciones entre sonidos
         combinations = tuple(zip(resp_sounds, heart_sounds))
     
     elif db_option == 'HS':
-        # Definición del directorio donde se guardará
-        folder_save = f'Database_manufacturing/db_HR/Heart Segmentation/'\
-                f'Seed-{seed} - {scale_ind} - {a_heart}_Heart {a_resp}_Resp {a_noise}_White noise'
+        if version == 1:
+            if db_scale == 'abs':
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Heart Segmentation/'\
+                            f'Seed-{seed} - x - {a_heart}_Heart {a_resp}_Resp'\
+                            f'{a_noise}_White noise'
+            else:
+                # Definición del directorio donde se guardará
+                folder_save = f'Database_manufacturing/db_HR/Heart Segmentation/'\
+                              f'Seed-{seed} - ({dB_value}dB) [Resp-Heart]'
         
         # Definición de las posibles combinaciones entre sonidos
         combinations = tuple(product(resp_sounds, heart_sounds))
@@ -759,9 +781,7 @@ def get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', v
         if db_scale == 'abs':
             hr_sound = a_resp * resp_to_sum + a_heart * heart_to_sum + a_noise * white_noise
         elif db_scale == 'dB':
-            hr_sound = db_attenuation(heart_to_sum, a_heart) + \
-                       db_attenuation(resp_to_sum, a_resp) + \
-                       db_attenuation(white_noise, a_noise)
+            hr_sound = _db_relation(resp_to_sum, heart_to_sum, db_rel_desired=dB_value)
         else:
             raise Exception('Opción de escala incorrecta.')
         
@@ -854,10 +874,11 @@ def generate_dictionary_W(filepath, samplerate_des=44100, n_components=4, N=512,
 # Módulo de testeo
 # filepath = 'Heart component dictionaries/normal_a'
 
-
-dir_to_heart = 'Database_manufacturing/db_heart/Manual combinations v2/Posterior'
-get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='abs', version=2, 
-                             ausc_zone='Posterior', a_heart=0.5, a_resp=0.5, a_noise=0, seed=0)
+# ausc_zone = 'Both'
+# dir_to_heart = f'Database_manufacturing/db_heart/Manual combinations v2/{ausc_zone}'
+# for dB in range(-12, 15, 3):
+#     get_heart_respiratory_sounds(dir_to_heart, db_option='SS', db_scale='dB', dB_value=dB, version=2, 
+#                                 ausc_zone=ausc_zone, a_heart=0.8, a_resp=0.2, a_noise=0, seed=0)
 
 
 '''

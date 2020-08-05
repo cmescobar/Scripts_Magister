@@ -16,8 +16,8 @@ from source_separation import nmf_applied_all, get_components_HR_sounds
 def generate_results(sep_type='on segments', ausc_zone='Anterior'):
     # Parametros de separación
     N = 1024
-    noverlap = int(0.75 * N)
-    n_components = 10
+    noverlap = int(0.95 * N)
+    n_components = 2
     padding = 3 * N
     repeat = 0 # 4
     sr_des = 44100 // 4
@@ -26,10 +26,11 @@ def generate_results(sep_type='on segments', ausc_zone='Anterior'):
     N_fade = 100
     l1_ratio = 0    # 1
     alpha = 0       # 0.03
-    assign_method = 'auto'
-    clustering = True
+    assign_method = 'manual'
+    clustering = False
     dec_criteria = 'vote'
-    H_binary = False
+    H_binary = True
+    only_centroid = False
     
     # Definición filepath
     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
@@ -46,7 +47,70 @@ def generate_results(sep_type='on segments', ausc_zone='Anterior'):
                             ausc_zone=ausc_zone, fcut_spect_crit=200, 
                             measure_spect_crit='correlation', i_selection='max', 
                             f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
-                            H_binary=H_binary, reduce_to_H=False, dec_criteria=dec_criteria)
+                            H_binary=H_binary, reduce_to_H=False, dec_criteria=dec_criteria, 
+                            only_centroid=only_centroid)
+    
+    # for dB in range(-9, 12, 3):
+    #     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
+    #                f'Seed-0 - ({dB}dB) [Resp-Heart]'
+
+    #     get_components_HR_sounds(filepath, sr_des, 
+    #                              sep_type=sep_type, assign_method=assign_method, 
+    #                             clustering=False, n_components=n_components, N=N, 
+    #                             N_lax=N_lax, N_fade=N_fade, noverlap=noverlap, 
+    #                             padding=padding, repeat=repeat, window=window, 
+    #                             whole=False, alpha_wiener=1, filter_out='wiener', 
+    #                             init='random', solver='mu', beta=2, tol=1e-4, max_iter=1000, 
+    #                             alpha_nmf=alpha, l1_ratio=l1_ratio, random_state=0, 
+    #                             W_0=None, H_0=None, plot_segments=True, scale='abs', 
+    #                             ausc_zone=ausc_zone, fcut_spect_crit=200, 
+    #                             measure_spect_crit='correlation', i_selection='max', 
+    #                             f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
+    #                             H_binary=True, reduce_to_H=False, dec_criteria='or')
+
+
+def generate_results_factory(sep_type='on segments', ausc_zone='Anterior'):
+    # Parametros de separación
+    N = [512, 1024]
+    n_components = [2]# [4, 5, 10, 15, 20]
+    beta = [1, 2]
+    repeat = 0 # 4
+    sr_des = 44100 // 4
+    window = 'hann'
+    l1_ratio = 0    # 1
+    alpha = 0       # 0.03
+    assign_method = 'auto'
+    clustering = True
+    dec_criteria = 'vote'
+    H_binary = True
+    only_centroid = False
+    
+    # Definición filepath
+    filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
+                'Seed-0 - x - 0.5_Heart 0.5_Resp 0_White noise'
+    
+    for n_comps in n_components:
+        for beta_i in beta:
+            for n in N:
+                noverlap = [int(0.75 * n), int(0.9 * n), int(0.95 * n)]
+                padding = 3 * n
+                N_lax = 100 if N == 1024 else 50
+                N_fade = 100 if N == 1024 else 50
+                for nov in noverlap:
+                    get_components_HR_sounds(filepath, sr_des, sep_type=sep_type, 
+                                            assign_method=assign_method, 
+                                            clustering=clustering, n_components=n_comps, N=n, 
+                                            N_lax=N_lax, N_fade=N_fade, noverlap=nov, 
+                                            padding=padding, repeat=repeat, window=window, 
+                                            whole=False, alpha_wiener=1, filter_out='wiener', 
+                                            init='random', solver='mu', beta=beta_i, tol=1e-4, max_iter=2000, 
+                                            alpha_nmf=alpha, l1_ratio=l1_ratio, random_state=0, 
+                                            W_0=None, H_0=None, plot_segments=True, scale='abs', 
+                                            ausc_zone=ausc_zone, fcut_spect_crit=500, 
+                                            measure_spect_crit='correlation', i_selection='max', 
+                                            f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
+                                            H_binary=H_binary, reduce_to_H=False, dec_criteria=dec_criteria, 
+                                            only_centroid=only_centroid)
     
     # for dB in range(-9, 12, 3):
     #     filepath = f'Database_manufacturing/db_HR/Source Separation/v2/{ausc_zone}/'\
@@ -100,6 +164,7 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Both'):
         N = dict_sim['N']
         noverlap = dict_sim['noverlap']
         window = dict_sim['window']
+        clustering = dict_sim['clustering']
     except:
         raise Exception(f'Simulación con "id {id_rev}" no realizada.')
     
@@ -111,6 +176,12 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Both'):
     open(f'{filepath}/Result Analysis - Heart.txt', 'w').close()
     
     files_to_rev = [i for i in os.listdir(filepath) if i.startswith('HR')]
+    
+    # Definición del texto la señal
+    if clustering:
+        sound_type = ' clustering'
+    else:
+        sound_type = ''
     
     for name_i in tqdm(files_to_rev, desc=f'Desc id {id_rev}', ncols=70):
         # Obtener nombres de archivo
@@ -133,11 +204,11 @@ def evaluate_result(sep_type='to all', id_rev=1, version=2, ausc_zone='Both'):
         
         # Abriendo los archivos obtenidos mediante descomposición
         if sep_type == 'to all':
-            resp_comp, _ = sf.read(f'{filepath}/{name_i}/ Respiratory Sound.wav')
-            heart_comp, _ = sf.read(f'{filepath}/{name_i}/ Heart Sound.wav')
+            resp_comp, _ = sf.read(f'{filepath}/{name_i}/ Respiratory Sound{sound_type}.wav')
+            heart_comp, _ = sf.read(f'{filepath}/{name_i}/ Heart Sound{sound_type}.wav')
         elif sep_type in ['on segments', 'masked segments']:
-            resp_comp, _ = sf.read(f'{filepath}/{name_i}/Respiratory signal.wav')
-            heart_comp, _ = sf.read(f'{filepath}/{name_i}/Heart signal.wav')
+            resp_comp, _ = sf.read(f'{filepath}/{name_i}/Respiratory signal{sound_type}.wav')
+            heart_comp, _ = sf.read(f'{filepath}/{name_i}/Heart signal{sound_type}.wav')
         
         # Seleccionando el largo más corto de cada uno (para hacer un punto a punto)
         minlen_resp = min(len(resp_to), len(resp_comp))
@@ -273,8 +344,12 @@ def evaluate_results(sep_type='to all', version=2, ausc_zone='Anterior'):
     id_folders.sort()
     
     for id_rev in id_folders:
-        evaluate_result(sep_type=sep_type, id_rev=id_rev, version=version, 
-                        ausc_zone=ausc_zone)
+        try:
+            evaluate_result(sep_type=sep_type, id_rev=id_rev, version=version, 
+                            ausc_zone=ausc_zone)
+        except:
+            print(f'Puede que la base de datos en {ausc_zone} con separación {sep_type} '
+                  f'con id {id_rev} no esté completa\n')
 
 
 def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2, 
@@ -292,6 +367,8 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
         filepath = f'{filepath}/Separation to all'
     elif sep_type == 'on segments':
         filepath = f'{filepath}/Separation on segments'
+    elif sep_type == 'masked segments':
+        filepath = f'{filepath}/Masking on segments'
     else:
         raise Exception('Opción para "sep_type" no válido.')
     
@@ -318,6 +395,7 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
     sdr_total = list()
     psd_total = list()
     error_total = list()
+    id_list = list()
     
     # Listas solo para respiración
     hnrp_total = list()
@@ -335,6 +413,7 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
     for id_rev in tqdm(id_folders, desc=f'Analyzing {sep_type}', ncols=70):
         # Número del ID
         id_number = id_rev.split(' ')[-1]
+        id_list.append(id_number)
         
         with open(f'{id_rev}/Result Analysis - {to_analyze}.txt', 'r', encoding='utf8') as file:
             for line in file:
@@ -353,16 +432,6 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
                     hnrp_list.append(float(dict_to_rev['HNRP']))
                     p_list.append(float(dict_to_rev['p(%)']))
         
-        # Agregar a la lista de listas
-        mse_total.append(mse_list)
-        nmse_total.append(nmse_list)
-        rmse_total.append(rmse_list)
-        sdr_total.append(sdr_list)
-        psd_total.append(psd_list)
-        hnrp_total.append(hnrp_list)
-        p_total.append(p_list)
-        error_total.append(error_list)
-        
         # Transformando las listas en arreglos
         mse_array = np.array(mse_list)
         nmse_array = np.array(nmse_list)
@@ -372,6 +441,16 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
         hnrp_array = np.array(hnrp_list)
         p_array = np.array(p_list)
         error_array = np.array(error_list)
+        
+        # Agregar a la lista de listas
+        mse_total.append(mse_array)
+        nmse_total.append(nmse_array)
+        rmse_total.append(rmse_array)
+        sdr_total.append(sdr_array)
+        psd_total.append(psd_array)
+        hnrp_total.append(hnrp_array)
+        p_total.append(p_array)
+        error_total.append(error_array)
         
         # Escribiendo en la tabla
         if to_analyze == 'Respiration':
@@ -393,56 +472,134 @@ def resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version
                            "{:.4f} +- {:.4f}".format(error_array.mean(), error_array.std()),
                            "{:.4f} +- {:.4f}".format(sdr_array.mean(), sdr_array.std()),
                            "{:.4f} +- {:.4f}".format(psd_array.mean(), psd_array.std())])
+        
+        # Reiniciar las listas
+        mse_list = list()
+        nmse_list = list()
+        rmse_list = list()
+        sdr_list = list()
+        psd_list = list()
+        error_list = list()
+        
+        # Solo para respiración
+        hnrp_list = list()
+        p_list = list()
     
     # Finalmente se guarda en un archivo resumen
     with open(f'{filepath}/Analysis results.txt', 'w', encoding='utf8') as file:
         file.write(table.get_string())
     
+    # Se construye una lista de promedios y desviaciones estándar para generar un .csv
+    mse_total_info = [(int(id_list[num]), i.mean(), i.std())
+                      for num, i in enumerate(mse_total) if not np.isnan(i.mean())]
+    nmse_total_info = [(int(id_list[num]), i.mean(), i.std()) 
+                       for num, i in enumerate(nmse_total) if not np.isnan(i.mean())]
+    rmse_total_info = [(int(id_list[num]), i.mean(), i.std()) 
+                       for num, i in enumerate(rmse_total) if not np.isnan(i.mean())]
+    error_total_info = [(int(id_list[num]), i.mean(), i.std()) 
+                        for num, i in enumerate(error_total) if not np.isnan(i.mean())]
+    sdr_total_info = [(int(id_list[num]), i.mean(), i.std()) 
+                      for num, i in enumerate(sdr_total) if not np.isnan(i.mean())]
+    psd_total_info = [(int(id_list[num]), i.mean(), i.std()) 
+                      for num, i in enumerate(psd_total) if not np.isnan(i.mean())]
+    
+    # Ordenando
+    mse_total_info.sort(key=lambda x: x[1])
+    nmse_total_info.sort(key=lambda x: x[1])
+    rmse_total_info.sort(key=lambda x: x[1])
+    error_total_info.sort(key=lambda x: x[1])
+    sdr_total_info.sort(key=lambda x: x[1], reverse=True)
+    psd_total_info.sort(key=lambda x: x[1], reverse=True)
+    
+    # Finalmente se guarda en un archivo resumen
+    with open(f'{filepath}/Analysis results ordered.csv', 'w', encoding='utf8') as file:
+        file.write('MSE results\n')
+        for line in mse_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+        file.write('NMSE results\n')
+        for line in nmse_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+        file.write('RMSE results\n')
+        for line in rmse_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+        file.write('ERROR results\n')
+        for line in error_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+        file.write('SDR results\n')
+        for line in sdr_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+        file.write('PSD results\n')
+        for line in mse_total_info:
+            file.write(f'{line}\n')
+        file.write('\n\n')
+        
+    
+    # Propiedades diagramas de caja
+    meanpointprops = dict(marker='.', markerfacecolor='red', markeredgecolor='red')
+    
     # Creación de diagramas de caja
-    plt.boxplot(mse_total)
+    plt.figure(figsize=(20,8))
+    plt.boxplot(mse_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
     plt.ylabel('MSE')
     plt.title(f'{to_analyze} MSE Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} mse_boxplot.png')
     plt.close()
     
-    plt.boxplot(nmse_total)
+    plt.figure(figsize=(20,8))
+    plt.boxplot(nmse_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
     plt.ylabel('NMSE')
     plt.title(f'{to_analyze} NMSE Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} nmse_boxplot.png')
     plt.close()
     
-    plt.boxplot(rmse_total)
+    plt.figure(figsize=(20,8))
+    plt.boxplot(rmse_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
     plt.ylabel('RMSE')
     plt.title(f'{to_analyze} RMSE Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} rmse_boxplot.png')
     plt.close()
     
-    plt.boxplot(error_total)
-    plt.ylabel('RMSE')
+    plt.figure(figsize=(20,8))
+    plt.boxplot(error_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
+    plt.ylabel('Error')
     plt.title(f'{to_analyze} Error total Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} Error_boxplot.png')
     plt.close()
     
-    plt.boxplot(sdr_total)
+    plt.figure(figsize=(20,8))
+    plt.boxplot(sdr_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
     plt.ylabel('SDR')
     plt.title(f'{to_analyze} SDR Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} sdr_boxplot.png')
     plt.close()
     
-    plt.boxplot(psd_total)
+    plt.figure(figsize=(20,8))
+    plt.boxplot(psd_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
     plt.ylabel('PSD')
     plt.title(f'{to_analyze} PSD Boxplot')
     plt.savefig(f'{filepath}/{to_analyze} psd_boxplot.png')
     plt.close()
     
     if to_analyze == 'Respiration':
-        plt.boxplot(hnrp_total)
+        plt.figure(figsize=(20,8))
+        plt.boxplot(hnrp_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
         plt.ylabel('HNRP')
         plt.title(f'{to_analyze} HNRP Boxplot')
         plt.savefig(f'{filepath}/{to_analyze} hnrp_boxplot.png')
         plt.close()
         
-        plt.boxplot(p_total)
+        plt.figure(figsize=(20,8))
+        plt.boxplot(p_total, labels=id_list, showmeans=True, meanprops=meanpointprops)
         plt.ylabel('p(%)')
         plt.title(f'{to_analyze} p(%) Boxplot')
         plt.savefig(f'{filepath}/{to_analyze} p_boxplot.png')
@@ -808,14 +965,23 @@ def testing_module_1():
 
 
 
-# generate_results(ausc_zone='Both', sep_type='to all')
-generate_results(ausc_zone='Both', sep_type='on segments')
+generate_results(ausc_zone='Both', sep_type='to all')
+# generate_results(ausc_zone='Both', sep_type='on segments')
 # generate_results(ausc_zone='Both', sep_type='masked segments')
 
-# evaluate_results(sep_type='masked segments', version=2, ausc_zone='Both')
+# print('Resuming to all...')
+# resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2, ausc_zone='Both')
+# resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, ausc_zone='Both')
+# print('Resuming on segments...')
+# resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', version=2, ausc_zone='Both')
+# resume_evaluate_results(to_analyze='Heart', sep_type='on segments', version=2, ausc_zone='Both')
+# print('Resuming masked segments...')
+# resume_evaluate_results(to_analyze='Respiration', sep_type='masked segments', version=2, ausc_zone='Both')
+# resume_evaluate_results(to_analyze='Heart', sep_type='masked segments', version=2, ausc_zone='Both')
+
+
 # compare_results(to_analyze='Heart ', ausc_zone='Both')
 # compare_results(to_analyze='Respiration', ausc_zone='Both')
-
 
 
 """
@@ -823,14 +989,27 @@ generate_results(ausc_zone='Both', sep_type='to all')
 generate_results(ausc_zone='Both', sep_type='on segments')
 generate_results(ausc_zone='Both', sep_type='masked segments')
 
+print('Generating to all...')
+generate_results_factory(ausc_zone='Both', sep_type='to all')
+print('Generating on segments...')
+generate_results_factory(ausc_zone='Both', sep_type='on segments')
+print('Generating masked segments...')
+generate_results_factory(ausc_zone='Both', sep_type='masked segments')
+
+print('Evaluating to all...')
 evaluate_results(sep_type='to all', version=2, ausc_zone='Both')
+print('Evaluating on segments...')
 evaluate_results(sep_type='on segments', version=2, ausc_zone='Both')
+print('Evaluating masked segments...')
 evaluate_results(sep_type='masked segments', version=2, ausc_zone='Both')
 
+print('Evaluating to all...')
 resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, 
-                        ausc_zone='Anterior')
-resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2, 
-                        ausc_zone='Posterior')
+                        ausc_zone='Both')
+print('Evaluating on segments...')
 resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', version=2, 
-                        ausc_zone='Anterior')
+                        ausc_zone='Both')
+print('Evaluating masked segments...')
+resume_evaluate_results(to_analyze='Respiration', sep_type='masked segments', version=2, 
+                        ausc_zone='Both')
 """

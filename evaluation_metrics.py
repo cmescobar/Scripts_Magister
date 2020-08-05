@@ -132,10 +132,6 @@ def SDR(signal_original, signal_obtained):
         blind audio source separation," in IEEE Transactions on Audio, Speech, 
         and Language Processing, vol. 14, no. 4, pp. 1462-1469, July 2006, 
         doi: 10.1109/TSA.2005.858005.
-    [2] E. Vincent, R. Gribonval and C. Fevotte, "Performance measurement in 
-        blind audio source separation," in IEEE Transactions on Audio, Speech, 
-        and Language Processing, vol. 14, no. 4, pp. 1462-1469, July 2006, 
-        doi: 10.1109/TSA.2005.858005.
     '''
     return 10 * np.log10(np.sum(signal_original ** 2) / \
                          np.sum((signal_obtained - signal_original) ** 2))
@@ -250,7 +246,7 @@ def performance_HNRP(hnrp, signal_hr, signal_heart):
         Applied Acoustics. Elsevier.
     '''
     # Porcentaje de presencia del sonido cardíaco en el sonido cardiorespiratorio.
-    b = sum(abs(signal_heart)) / sum(abs(signal_hr))
+    b = np.sum(signal_heart ** 2) / np.sum(signal_hr ** 2)
     
     return 1 - abs(b - hnrp) / b
 

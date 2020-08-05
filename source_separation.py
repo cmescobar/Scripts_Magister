@@ -846,7 +846,7 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
                              ausc_zone='Anterior', fcut_spect_crit=200, 
                              measure_spect_crit='correlation', i_selection='max', f1_roll=20, 
                              f2_roll=150, measure_temp_crit='q_equal', H_binary=True, 
-                             reduce_to_H=False, dec_criteria='or', version=2):
+                             reduce_to_H=False, dec_criteria='or', version=2, only_centroid=False):
     '''Función que permite generar los archivos de audio de las componentes separadas
     mediante el proceso de NMF.
     
@@ -905,7 +905,7 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
                            'i_selection': i_selection, 'f1_roll': f1_roll, 
                            'f2_roll': f2_roll, 'measure_temp_crit': measure_temp_crit, 
                            'H_binary': H_binary, 'reduce_to_H': reduce_to_H, 
-                           'dec_criteria': dec_criteria}
+                           'dec_criteria': dec_criteria, 'only_centroid': only_centroid}
         
         # Definición del filepath a guardar
         filepath_to_save = f'{filepath}/Components/Separation on segments'
@@ -995,7 +995,7 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
                                           measure_temp_crit=measure_temp_crit,
                                           H_binary=H_binary, reduce_to_H=reduce_to_H, 
                                           dec_criteria=dec_criteria, version=version, 
-                                          clustering=clustering)
+                                          clustering=clustering, only_centroid=only_centroid)
         
         elif sep_type == 'masked segments':
             nmf_applied_masked_segments(dir_audio, samplerate_des=samplerate_des,
@@ -1243,7 +1243,7 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                                   measure_spect_crit='correlation', i_selection='max', 
                                   f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
                                   H_binary=True, reduce_to_H=False, dec_criteria='or', 
-                                  version=2, clustering=False):
+                                  version=2, clustering=False, only_centroid=False):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
     ubicación en el ordenador), la cual solamente descompone los segmentos de interés
     previamente etiquetados, uno a uno.
@@ -1333,7 +1333,7 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                         'i_selection': i_selection, 'f1_roll': f1_roll, 
                         'f2_roll': f2_roll, 'measure_temp_crit': measure_temp_crit, 
                         'H_binary': H_binary, 'reduce_to_H': reduce_to_H, 
-                        'dec_criteria': dec_criteria}
+                        'dec_criteria': dec_criteria, 'only_centroid': only_centroid}
     
     # Control de parámetros simulación (consultar repetir) y asignación de id's
     dict_simulation, _ = _manage_registerdata_nmf(dict_simulation, 
@@ -1492,6 +1492,9 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                 elif dec_criteria == 'and':
                     heart_dec = a1_bool & a2_bool & a3_bool
                 
+                if only_centroid:
+                    heart_dec = a2_bool
+                
                 # Definición de las señales a grabar
                 heart_comps = np.zeros(len(comps[0]))
                 resp_comps = np.zeros(len(comps[0]))
@@ -1512,7 +1515,6 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                                         measure_temp_crit)
                 _plot_segments_nmf_kmore(signal_to, heart_comps, resp_comps, N_fade, 
                                          lower, upper, num, filepath_to_save_name)
-            
             
             elif assign_method == 'labeled':
                 pass

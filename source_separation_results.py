@@ -72,7 +72,7 @@ def generate_results(sep_type='on segments', ausc_zone='Anterior'):
 def generate_results_factory(sep_type='on segments', ausc_zone='Anterior'):
     # Parametros de separación
     N = [512, 1024]
-    n_components = [2]# [4, 5, 10, 15, 20]
+    n_components = [4, 5, 10, 15, 20]
     beta = [1, 2]
     repeat = 0 # 4
     sr_des = 44100 // 4
@@ -92,7 +92,7 @@ def generate_results_factory(sep_type='on segments', ausc_zone='Anterior'):
     for n_comps in n_components:
         for beta_i in beta:
             for n in N:
-                noverlap = [int(0.75 * n), int(0.9 * n), int(0.95 * n)]
+                noverlap = [int(0.5 * n), int(0.75 * n), int(0.95 * n)]
                 padding = 3 * n
                 N_lax = 100 if N == 1024 else 50
                 N_fade = 100 if N == 1024 else 50
@@ -103,13 +103,15 @@ def generate_results_factory(sep_type='on segments', ausc_zone='Anterior'):
                                             N_lax=N_lax, N_fade=N_fade, noverlap=nov, 
                                             padding=padding, repeat=repeat, window=window, 
                                             whole=False, alpha_wiener=1, filter_out='wiener', 
-                                            init='random', solver='mu', beta=beta_i, tol=1e-4, max_iter=2000, 
+                                            init='random', solver='mu', beta=beta_i, 
+                                            tol=1e-4, max_iter=2000, 
                                             alpha_nmf=alpha, l1_ratio=l1_ratio, random_state=0, 
                                             W_0=None, H_0=None, plot_segments=True, scale='abs', 
                                             ausc_zone=ausc_zone, fcut_spect_crit=500, 
                                             measure_spect_crit='correlation', i_selection='max', 
                                             f1_roll=20, f2_roll=150, measure_temp_crit='q_equal', 
-                                            H_binary=H_binary, reduce_to_H=False, dec_criteria=dec_criteria, 
+                                            H_binary=H_binary, reduce_to_H=False, 
+                                            dec_criteria=dec_criteria, 
                                             only_centroid=only_centroid)
     
     # for dB in range(-9, 12, 3):
@@ -964,30 +966,22 @@ def testing_module_1():
                     ausc_zone='Anterior')
 
 
-
-generate_results(ausc_zone='Both', sep_type='to all')
-# generate_results(ausc_zone='Both', sep_type='on segments')
-# generate_results(ausc_zone='Both', sep_type='masked segments')
-
-# print('Resuming to all...')
-# resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2, ausc_zone='Both')
-# resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, ausc_zone='Both')
-# print('Resuming on segments...')
-# resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', version=2, ausc_zone='Both')
-# resume_evaluate_results(to_analyze='Heart', sep_type='on segments', version=2, ausc_zone='Both')
-# print('Resuming masked segments...')
-# resume_evaluate_results(to_analyze='Respiration', sep_type='masked segments', version=2, ausc_zone='Both')
-# resume_evaluate_results(to_analyze='Heart', sep_type='masked segments', version=2, ausc_zone='Both')
+# print('Generating to all...')
+# generate_results_factory(ausc_zone='Both', sep_type='to all')
+# print('Generating on segments...')
+# generate_results_factory(ausc_zone='Both', sep_type='on segments')
+print('Generating masked segments...')
+generate_results_factory(ausc_zone='Both', sep_type='masked segments')
 
 
-# compare_results(to_analyze='Heart ', ausc_zone='Both')
-# compare_results(to_analyze='Respiration', ausc_zone='Both')
+
 
 
 """
 generate_results(ausc_zone='Both', sep_type='to all')
 generate_results(ausc_zone='Both', sep_type='on segments')
 generate_results(ausc_zone='Both', sep_type='masked segments')
+
 
 print('Generating to all...')
 generate_results_factory(ausc_zone='Both', sep_type='to all')
@@ -996,12 +990,14 @@ generate_results_factory(ausc_zone='Both', sep_type='on segments')
 print('Generating masked segments...')
 generate_results_factory(ausc_zone='Both', sep_type='masked segments')
 
+
 print('Evaluating to all...')
 evaluate_results(sep_type='to all', version=2, ausc_zone='Both')
 print('Evaluating on segments...')
 evaluate_results(sep_type='on segments', version=2, ausc_zone='Both')
 print('Evaluating masked segments...')
 evaluate_results(sep_type='masked segments', version=2, ausc_zone='Both')
+
 
 print('Evaluating to all...')
 resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, 
@@ -1012,4 +1008,15 @@ resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', versio
 print('Evaluating masked segments...')
 resume_evaluate_results(to_analyze='Respiration', sep_type='masked segments', version=2, 
                         ausc_zone='Both')
+
+
+print('Resuming to all...')
+resume_evaluate_results(to_analyze='Respiration', sep_type='to all', version=2, ausc_zone='Both')
+resume_evaluate_results(to_analyze='Heart', sep_type='to all', version=2, ausc_zone='Both')
+print('Resuming on segments...')
+resume_evaluate_results(to_analyze='Respiration', sep_type='on segments', version=2, ausc_zone='Both')
+resume_evaluate_results(to_analyze='Heart', sep_type='on segments', version=2, ausc_zone='Both')
+print('Resuming masked segments...')
+resume_evaluate_results(to_analyze='Respiration', sep_type='masked segments', version=2, ausc_zone='Both')
+resume_evaluate_results(to_analyze='Heart', sep_type='masked segments', version=2, ausc_zone='Both')
 """

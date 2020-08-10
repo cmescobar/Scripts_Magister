@@ -13,7 +13,7 @@ from math_functions import wiener_filter, raised_cosine_fading
 from descriptor_functions import get_spectrogram, get_inverse_spectrogram, centroide
 from filter_and_sampling import resampling_by_points, lowpass_filter, downsampling_signal
 from clustering_functions import spectral_correlation_test, centroid_test,\
-    temporal_correlation_test, temporal_correlation_test_segment
+    temporal_correlation_test, temporal_correlation_test_segment, machine_learning_clustering
 
 
 def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=1024, 
@@ -1150,23 +1150,24 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method
         resp_signal = comps[resp_dec]
     
     elif n_components > 2 or clustering:
+        # Definición de la carpeta a revisar
+        folder = f'{dir_file.split("/")[0]}'
+        
+        # Definición del nombre del archivo de sonidos cardiacos
+        heart_segments = f'{dir_file.split("/")[-1].strip(".wav").split(" ")[-1]}'
+        
+        # Definición de la ubicación de los segmentos de sonido cardiaco de interés
+        if version == 1:
+            filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                    f'{heart_segments} - segments.txt'
+        else:
+            filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
+                                    f'{ausc_zone}/{heart_segments} - segments.txt'
+        
+        
         if assign_method == 'auto':
             # CRITERIO 1: Definición de la ubicación del diccionario
             filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
-            
-            # Definición de la carpeta a revisar
-            folder = f'{dir_file.split("/")[0]}'
-            
-            # Definición del nombre del archivo de sonidos cardiacos
-            heart_segments = f'{dir_file.split("/")[-1].strip(".wav").split(" ")[-1]}'
-            
-            # Definición de la ubicación de los segmentos de sonido cardiaco de interés
-            if version == 1:
-                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
-                                        f'{heart_segments} - segments.txt'
-            else:
-                filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
-                                        f'{ausc_zone}/{heart_segments} - segments.txt'
             
             # Aplicación de los criterios
             ## CRITERIO 1: Correlación espectral
@@ -1217,11 +1218,32 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method
             _plot_clustering_points(dir_to_save, a1, a2, a3, 
                                     measure_temp_crit)
             
-        elif assign_method == 'labeled':
-            pass
+        elif assign_method == 'machine':
+            # CRITERIO: Machine Learning
+            heart_dec = \
+                machine_learning_clustering(comps, signal_to, samplerate_des, N_lax=20, 
+                                            filepath_data=filename_heart_segments, 
+                                            N=4096, classifier='knn', n_neighbors=1, 
+                                            pca_comps=30, db_basys=1e-12)
+                                        
+            
+            # Definición de las señales a grabar
+            heart_signal = np.zeros(len(comps[0]))
+            resp_signal = np.zeros(len(comps[0]))
+            
+            # Finalmente, grabando los archivos
+            for num, dec in enumerate(heart_dec):
+                # Grabando cada componente
+                if dec:
+                    heart_signal += comps[num]
+                else:
+                    resp_signal += comps[num]
+            
+            # Definición del texto a guardar
+            save_txt = ' machine'
     
     # Registrando
-    if assign_method in ['auto', 'manual']:
+    if assign_method in ['auto_multi', 'auto_machine', 'manual']:
         with open(f'{dir_to_save}/Heart decision{save_txt}.txt', 'w', encoding='utf8') as data:
             data.write(str(heart_dec))
     

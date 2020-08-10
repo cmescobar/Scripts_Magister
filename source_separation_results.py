@@ -16,8 +16,8 @@ from source_separation import nmf_applied_all, get_components_HR_sounds
 def generate_results(sep_type='on segments', ausc_zone='Anterior'):
     # Parametros de separación
     N = 1024
-    noverlap = int(0.95 * N)
-    n_components = 2
+    noverlap = int(0.75 * N)
+    n_components = 10
     padding = 3 * N
     repeat = 0 # 4
     sr_des = 44100 // 4
@@ -26,8 +26,8 @@ def generate_results(sep_type='on segments', ausc_zone='Anterior'):
     N_fade = 100
     l1_ratio = 0    # 1
     alpha = 0       # 0.03
-    assign_method = 'manual'
-    clustering = False
+    assign_method = 'auto_machine'
+    clustering = True
     dec_criteria = 'vote'
     H_binary = True
     only_centroid = False
@@ -970,12 +970,12 @@ def testing_module_1():
 # generate_results_factory(ausc_zone='Both', sep_type='to all')
 # print('Generating on segments...')
 # generate_results_factory(ausc_zone='Both', sep_type='on segments')
-print('Generating masked segments...')
-generate_results_factory(ausc_zone='Both', sep_type='masked segments')
+# print('Generating masked segments...')
+# generate_results_factory(ausc_zone='Both', sep_type='masked segments')
 
 
 
-
+generate_results(ausc_zone='Both', sep_type='to all')
 
 """
 generate_results(ausc_zone='Both', sep_type='to all')

@@ -1,8 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ast import literal_eval
+from sklearn.decomposition import PCA
+from evaluation_metrics import get_PSD
+from sklearn import preprocessing, svm
+from sklearn.neighbors import KNeighborsClassifier
+from librosa.feature import mfcc, spectral_centroid, spectral_rolloff, \
+    spectral_bandwidth, spectral_contrast, spectral_flatness, \
+    zero_crossing_rate
 from filter_and_sampling import resampling_by_points
 from math_functions import _correlation, _correlations, cosine_similarities
+
 
 
 def spectral_correlation_criteria(W_i, W_dic, fcut_bin, measure='cosine',
@@ -220,6 +228,568 @@ def spectral_correlation_test(W, samplerate, fcut, N, noverlap, n_comps_dict,
     
     # Aplicando umbral
     return S_i_array >= threshold, S_i_array
+
+
+def spectral_correlation_test_2(W, signal_in, samplerate, N_lax, filepath_data, 
+                                prom_spectra=False, measure='correlation', 
+                                i_selection='max', threshold='mean'):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio
+    resp_list = list()
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar
+        lower = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper = i[0] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower:upper]
+        
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    
+    # Definición de la cantidad de puntos a utilizar
+    N = (W.shape[0]-1) * 2
+    
+    # Definición de la matriz a rellenar
+    resp_array = np.empty((len(resp_list), W.shape[0]))
+    
+    # Re acondicionando las señales
+    for i in range(len(resp_list)):
+        # Resampleando a 4 veces la cantidad de puntos que se necesita
+        resp = resampling_by_points(resp_list[i], samplerate, N)
+        resp_array[i] = 20 * np.log10(1 / N * abs(np.fft.fft(resp)) 
+                                      + 1e-12)[:W.shape[0]]
+    
+    # Si es que se promedian los espectros
+    if prom_spectra:
+        resp_array = np.array([resp_array.mean(axis=0)])
+    
+    # Definición de la lista de booleanos de salida
+    S_i_list = list()
+    
+    for i in range(W.shape[1]):
+        # Se obtiene el bool correspondiente a la componente i. True si
+        # es sonido cardíaco y False si es sonido respiratorio
+        S_i = spectral_correlation_criteria(20 * np.log10(W[:,i] + 1e-12), 
+                                            resp_array, fcut_bin=-1, 
+                                            i_selection=i_selection,
+                                            measure=measure)
+        # Agregando...
+        S_i_list.append(S_i)
+    
+    # Transformando a array
+    S_i_array = np.array(S_i_list)
+        
+    # Definición de umbral
+    if threshold == 'mean':
+        threshold = np.mean(S_i_array)
+    elif threshold == 'median':
+        threshold = np.median(S_i_array)
+    
+    # Aplicando umbral
+    return S_i_array < threshold, S_i_array
+
+
+def machine_learning_clustering(comps, signal_in, samplerate, N_lax, filepath_data, 
+                                N=4096, classifier='svm', n_neighbors=1, pca_comps=30,
+                                db_basys=1e-12):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio y cardiaco
+    resp_list = list()
+    heart_list = list()
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar para el sonido respiratorio
+        lower_resp = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper_resp = i[0] // sr_ratio + N_lax
+        
+        # Definición de los límites a revisar para el sonido cardiaco
+        lower_heart = i[0] // sr_ratio - N_lax
+        upper_heart = i[1] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower_resp:upper_resp]
+        # Y cardiaca
+        heart_signal = signal_in[lower_heart:upper_heart]
+                
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        heart_list.append(heart_signal)
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    
+    # Definición de la matriz a rellenar
+    resp_array = np.empty((0, N//2+1))
+    heart_array = np.empty((0, N//2+1))
+    
+    # Re acondicionando las señales
+    for i in range(len(resp_list)):
+        # Resampleando a 4 veces la cantidad de puntos que se necesita
+        resp = resampling_by_points(resp_list[i], samplerate, N)
+        resp_array = np.vstack((resp_array, 
+                                20 * np.log10(1 / N * abs(np.fft.fft(resp)) 
+                                              + db_basys)[:N//2+1]))
+    
+    for i in range(len(heart_list)):
+        # Resampleando a 4 veces la cantidad de puntos que se necesita
+        heart = resampling_by_points(heart_list[i], samplerate, N)
+        heart_array = np.vstack((heart_array, 
+                                 20 * np.log10(1 / N * abs(np.fft.fft(heart)) 
+                                               + db_basys)[:N//2+1]))
+    
+    # Definición de la matriz de entrenamiento
+    X_train = np.vstack((resp_array, heart_array))
+    
+    '''
+    print(X_train)
+    print(np.argwhere(np.isnan(X_train)))
+    
+    plt.figure()
+    plt.pcolormesh(X_train, cmap='jet')
+    plt.colorbar()
+    plt.show()
+    return
+    '''
+    
+    # Definición de la matriz de etiquetas de entrenamiento. Se define como
+    # 0 para respiración y 1 para corazón
+    Y_train =  np.array([0] * resp_array.shape[0] +
+                        [1] * heart_array.shape[0])
+    
+    # Reducción de dimensiones
+    pca = PCA(n_components=pca_comps)
+    X_pca = pca.fit_transform(X_train)
+    
+    
+    for num, i in enumerate(X_pca):
+        if Y_train[num] == 0:
+            color = 'r'
+        elif Y_train[num] == 1:
+            color = 'b'
+        
+        plt.scatter(i[0], i[1], color=color)
+    
+    
+    if classifier == 'knn':
+        clas = KNeighborsClassifier(n_neighbors=n_neighbors, algorithm='auto')
+    elif classifier == 'svm':
+        clas = svm.SVC(kernel='linear', degree=50, gamma='auto')
+    else:
+        raise Exception('Opción "classifier" no válida.')
+    
+    # Ajuste del clasificador
+    clas.fit(X_pca, Y_train)
+    
+    # Definición de la variable de decisión
+    decision = list()
+    
+    # Para cada componente
+    for comp_sound in comps:
+        # Para cada iteración, se define nuevamente esta lista auxiliar que sirve para
+        # tomar la decisión de la componente i-ésima en base a la mayoría de votos de 
+        # las características del sonido cardiorrespiratorio
+        decision_comp = list()
+        
+        for i in intervals:
+            # Definición de los límites a revisar para el sonido cardiaco
+            lower = i[0] // sr_ratio - N_lax
+            upper = i[1] // sr_ratio + N_lax
+            
+            # Definición del sonido cardiorrespiratorio i en el sonido completo
+            hr_sound = resampling_by_points(comp_sound[lower:upper], samplerate, N)
+            
+            # Se calcula su magnitud
+            feat = 20 * np.log10(1 / N * abs(np.fft.fft(hr_sound)) + db_basys)[:N//2+1]
+            
+            # Y se transforma
+            feat = pca.transform(feat.reshape(1,-1))  
+            # plt.scatter(feat[:,0], feat[:,1], color='cyan', marker='.')
+            
+            # Resultado clasificación
+            Y_pred = clas.predict(feat)
+            
+            # Agregando a la lista
+            decision_comp.append(Y_pred)
+        
+        # Una vez completada la lista de decisiones, se procede a contar sus propiedades
+        q_hearts = np.sum(decision_comp)
+        
+        # Si la cantidad de componentes de corazón es mayor al 50%, entonces es corazón,
+        # en caso contrario es respiración
+        if q_hearts / len(decision_comp) >= 0.5:
+            decision.append(True)
+        else:
+            decision.append(False)
+    print(decision)
+    # plt.show()
+    return decision
+
+
+def machine_learning_clustering_OLD(comps, signal_in, samplerate, N_lax, filepath_data, 
+                                n_mfcc=20, classifier='svm'):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio y cardiaco
+    resp_list = list()
+    resp_mfcc = np.empty((0, n_mfcc))
+    heart_list = list()
+    heart_mfcc = np.empty((0, n_mfcc))
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar para el sonido respiratorio
+        lower_resp = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper_resp = i[0] // sr_ratio + N_lax
+        
+        # Definición de los límites a revisar para el sonido cardiaco
+        lower_heart = i[0] // sr_ratio - N_lax
+        upper_heart = i[1] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower_resp:upper_resp]
+        # Y cardiaca
+        heart_signal = signal_in[lower_heart:upper_heart]
+                
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        heart_list.append(heart_signal)
+        resp_mfcc = np.vstack((resp_mfcc, mfcc(resp_signal, sr=samplerate, 
+                                               n_mfcc=n_mfcc).T))
+        heart_mfcc = np.vstack((heart_mfcc, mfcc(heart_signal, sr=samplerate, 
+                                                 n_mfcc=n_mfcc).T))
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    resp_mfcc = np.vstack((resp_mfcc, mfcc(resp_signal, sr=samplerate, 
+                                           n_mfcc=n_mfcc).T))
+    
+    # Definición de la matriz de entrenamiento
+    X_train = np.vstack((resp_mfcc, heart_mfcc))
+    # Definición de la matriz de etiquetas de entrenamiento. Se define como
+    # 0 para respiración y 1 para corazón
+    Y_train =  np.array([0] * resp_mfcc.shape[0] +
+                        [1] * heart_mfcc.shape[0])
+    
+    # Reducción de dimensiones
+    pca = PCA(n_components=5)
+    X_pca = pca.fit_transform(X_train)
+    
+    '''
+    %matplotlib notebook
+    for num, i in enumerate(X_pca):
+        if Y_train[num] == 0:
+            color = 'r'
+        elif Y_train[num] == 1:
+            color = 'b'
+        
+        plt.scatter(i[0], i[1], color=color)
+    '''
+    
+    if classifier == 'knn':
+        clas = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+    elif classifier == 'svm':
+        clas = svm.SVC(kernel='linear', degree=50, gamma='auto')
+    
+    # Ajuste del clasificador
+    clas.fit(X_pca, Y_train)
+    
+    # Para cada componente
+    for comp_sound in comps:
+        for i in intervals:
+            # Definición de los límites a revisar para el sonido cardiaco
+            lower = i[0] // sr_ratio - N_lax
+            upper = i[1] // sr_ratio + N_lax
+            
+            hr_sound = comp_sound[lower:upper]
+            
+            # Se calcula su MFCC
+            mfcc_i = mfcc(np.asfortranarray(hr_sound), sr=samplerate, n_mfcc=n_mfcc).T
+            
+            # Y se transforma
+            mfcc_i = pca.transform(mfcc_i).mean(axis=0)
+            
+            plt.scatter(mfcc_i[0], mfcc_i[1], color='C2')
+                        
+            Y_pred = clas.predict(mfcc_i.reshape(1,-1))
+            print(Y_pred)
+     
+    plt.show()
+    return
+
+
+def machine_learning_clustering_OLD_2(comps, signal_in, samplerate, N_lax, filepath_data, 
+                                n_bands=5, N=4096, classifier='svm', n_neighbors=1, 
+                                pca_comps=30, db_basys=1e-12):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio y cardiaco
+    resp_list = list()
+    heart_list = list()
+    
+    # Definición de las matrices de características a rellenar
+    resp_feats = np.empty((0, n_bands + 1 + 5))
+    heart_feats = np.empty((0, n_bands + 1 + 5))
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar para el sonido respiratorio
+        lower_resp = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper_resp = i[0] // sr_ratio + N_lax
+        
+        # Definición de los límites a revisar para el sonido cardiaco
+        lower_heart = i[0] // sr_ratio - N_lax
+        upper_heart = i[1] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower_resp:upper_resp]
+        # Y cardiaca
+        heart_signal = signal_in[lower_heart:upper_heart]
+        
+        # Calculando las características de interés
+        resp_centroid = spectral_centroid(resp_signal, samplerate, 
+                                          n_fft=N, hop_length=N//2)
+        resp_flatness = spectral_flatness(resp_signal, n_fft=N, 
+                                          hop_length=N//2)
+        resp_bandwidth = spectral_bandwidth(resp_signal, samplerate,
+                                            n_fft=N, hop_length=N//2)
+        resp_rolloff = spectral_rolloff(resp_signal, samplerate,
+                                        n_fft=N, hop_length=N//2, 
+                                        roll_percent=0.85)
+        resp_contrast = spectral_contrast(resp_signal, samplerate,
+                                          n_fft=N, hop_length=N//2,
+                                          n_bands=n_bands, fmin=100)
+        resp_zerocross = zero_crossing_rate(resp_signal, frame_length=N,
+                                            hop_length=N//2)
+        
+        heart_centroid = spectral_centroid(heart_signal, samplerate, 
+                                           n_fft=N, hop_length=N//2)
+        heart_flatness = spectral_flatness(heart_signal, n_fft=N, 
+                                           hop_length=N//2)
+        heart_bandwidth = spectral_bandwidth(heart_signal, samplerate,
+                                             n_fft=N, hop_length=N//2)
+        heart_rolloff = spectral_rolloff(heart_signal, samplerate,
+                                         n_fft=N, hop_length=N//2, 
+                                         roll_percent=0.85)
+        heart_contrast = spectral_contrast(heart_signal, samplerate,
+                                           n_fft=N, hop_length=N//2,
+                                           n_bands=n_bands, fmin=100)
+        heart_zerocross = zero_crossing_rate(heart_signal, frame_length=N,
+                                             hop_length=N//2)
+        
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        heart_list.append(heart_signal)
+        
+        # Agregando las características
+        resp_feats_i = np.concatenate(([resp_centroid.mean()], 
+                                       [resp_flatness.mean()],
+                                       [resp_bandwidth.mean()],
+                                       [resp_rolloff.mean()],
+                                       resp_contrast.mean(axis=1),
+                                       [resp_zerocross.mean()]))
+        heart_feats_i = np.concatenate(([heart_centroid.mean()], 
+                                        [heart_flatness.mean()],
+                                        [heart_bandwidth.mean()],
+                                        [heart_rolloff.mean()],
+                                        heart_contrast.mean(axis=1),
+                                        [heart_zerocross.mean()]))
+        
+        # Para incorporarlas al vector de características
+        resp_feats = np.vstack((resp_feats, resp_feats_i))
+        heart_feats = np.vstack((heart_feats, heart_feats_i))
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    
+    # Calculando las características de interés
+    resp_centroid = spectral_centroid(resp_signal, samplerate, 
+                                      n_fft=N, hop_length=N//2)
+    resp_flatness = spectral_flatness(resp_signal, n_fft=N, 
+                                      hop_length=N//2)
+    resp_bandwidth = spectral_bandwidth(resp_signal, samplerate,
+                                        n_fft=N, hop_length=N//2)
+    resp_rolloff = spectral_rolloff(resp_signal, samplerate,
+                                    n_fft=N, hop_length=N//2, 
+                                    roll_percent=0.85)
+    resp_contrast = spectral_contrast(resp_signal, samplerate,
+                                      n_fft=N, hop_length=N//2,
+                                      n_bands=n_bands, fmin=100)
+    resp_zerocross = zero_crossing_rate(resp_signal, frame_length=N,
+                                        hop_length=N//2)
+    
+    # Agregando las características
+    resp_feats_i = np.concatenate(([resp_centroid.mean()], 
+                                   [resp_flatness.mean()],
+                                   [resp_bandwidth.mean()],
+                                   [resp_rolloff.mean()],
+                                   resp_contrast.mean(axis=1),
+                                   [resp_zerocross.mean()]))
+    
+    # Para incorporarlas al vector de características
+    resp_feats = np.vstack((resp_feats, resp_feats_i))
+        
+    # Definición de la matriz de entrenamiento
+    X_train = np.vstack((resp_feats, heart_feats))
+    
+    '''
+    print(X_train)
+    print(np.argwhere(np.isnan(X_train)))
+    
+    plt.figure()
+    plt.pcolormesh(X_train, cmap='jet')
+    plt.colorbar()
+    plt.show()
+    return
+    '''
+    
+    # Definición de la matriz de etiquetas de entrenamiento. Se define como
+    # 0 para respiración y 1 para corazón
+    Y_train =  np.array([0] * resp_feats.shape[0] +
+                        [1] * heart_feats.shape[0])
+    
+    # Reducción de dimensiones
+    pca = PCA(n_components=pca_comps)
+    X_pca = pca.fit_transform(X_train)
+    
+    '''
+    %matplotlib notebook
+    for num, i in enumerate(X_pca):
+        if Y_train[num] == 0:
+            color = 'r'
+        elif Y_train[num] == 1:
+            color = 'b'
+        
+        plt.scatter(i[1], i[2], color=color)
+    
+    plt.show()
+    return
+    '''
+    
+    if classifier == 'knn':
+        clas = KNeighborsClassifier(n_neighbors=n_neighbors, algorithm='auto')
+    elif classifier == 'svm':
+        clas = svm.SVC(kernel='linear', degree=50, gamma='auto')
+    else:
+        raise Exception('Opción "classifier" no válida.')
+    
+    # Ajuste del clasificador
+    clas.fit(X_pca, Y_train)
+    
+    # Definición de la variable de decisión
+    decision = list()
+    
+    # Para cada componente
+    for comp_sound in comps:
+        # Para cada iteración, se define nuevamente esta lista auxiliar que sirve para
+        # tomar la decisión de la componente i-ésima en base a la mayoría de votos de 
+        # las características del sonido cardiorrespiratorio
+        decision_comp = list()
+        
+        for i in intervals:
+            # Definición de los límites a revisar para el sonido cardiaco
+            lower = i[0] // sr_ratio - N_lax
+            upper = i[1] // sr_ratio + N_lax
+            
+            # Definición del sonido cardiorrespiratorio i en el sonido completo
+            hr_sound = resampling_by_points(comp_sound[lower:upper], samplerate, N)
+            
+            # Se calculan los features
+            comp_centroid = spectral_centroid(hr_sound, samplerate, 
+                                              n_fft=N, hop_length=N//2)
+            comp_flatness = spectral_flatness(hr_sound, n_fft=N, 
+                                              hop_length=N//2)
+            comp_bandwidth = spectral_bandwidth(hr_sound, samplerate,
+                                                n_fft=N, hop_length=N//2)
+            comp_rolloff = spectral_rolloff(hr_sound, samplerate,
+                                            n_fft=N, hop_length=N//2, 
+                                            roll_percent=0.85)
+            comp_contrast = spectral_contrast(hr_sound, samplerate,
+                                              n_fft=N, hop_length=N//2,
+                                              n_bands=n_bands, fmin=100)
+            comp_zerocross = zero_crossing_rate(hr_sound, frame_length=N,
+                                                hop_length=N//2)
+            
+            feat = np.concatenate(([comp_centroid.mean()], 
+                                   [comp_flatness.mean()],
+                                   [comp_bandwidth.mean()],
+                                   [comp_rolloff.mean()],
+                                   comp_contrast.mean(axis=1),
+                                   [comp_zerocross.mean()]))
+            
+            # Y se transforma
+            feat = pca.transform(feat.reshape(1,-1))           
+            # plt.scatter(feat[0], feat[1], color='cyan', marker='.')
+            
+            # Resultado clasificación
+            Y_pred = clas.predict(feat)
+            
+            # Agregando a la lista
+            decision_comp.append(Y_pred[0])
+        print(decision_comp)
+        # Una vez completada la lista de decisiones, se procede a contar sus propiedades
+        q_hearts = np.sum(decision_comp)
+        
+        # Si la cantidad de componentes de corazón es mayor al 50%, entonces es corazón,
+        # en caso contrario es respiración
+        if q_hearts / len(decision_comp) >= 0.7:
+            decision.append(True)
+        else:
+            decision.append(False)
+     
+    return decision
 
 
 def roll_off_test(X_list, f1, f2, samplerate, whole=False, percentage=0.85):
@@ -678,4 +1248,189 @@ def clustering_test(W, H, samplerate_original, samplerate_signal, N, N_audio, no
     
     else:
         raise Exception('Opción no válida para "decision_kind".')
+
+
+def machine_learning_clustering_OLD(comps, signal_in, samplerate, N_lax, filepath_data, 
+                                n_mfcc=20, classifier='svm'):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio y cardiaco
+    resp_list = list()
+    resp_mfcc = np.empty((0, n_mfcc))
+    heart_list = list()
+    heart_mfcc = np.empty((0, n_mfcc))
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar para el sonido respiratorio
+        lower_resp = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper_resp = i[0] // sr_ratio + N_lax
+        
+        # Definición de los límites a revisar para el sonido cardiaco
+        lower_heart = i[0] // sr_ratio - N_lax
+        upper_heart = i[1] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower_resp:upper_resp]
+        # Y cardiaca
+        heart_signal = signal_in[lower_heart:upper_heart]
+                
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        heart_list.append(heart_signal)
+        resp_mfcc = np.vstack((resp_mfcc, mfcc(resp_signal, sr=samplerate, 
+                                               n_mfcc=n_mfcc).T))
+        heart_mfcc = np.vstack((heart_mfcc, mfcc(heart_signal, sr=samplerate, 
+                                                 n_mfcc=n_mfcc).T))
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    resp_mfcc = np.vstack((resp_mfcc, mfcc(resp_signal, sr=samplerate, 
+                                           n_mfcc=n_mfcc).T))
+    
+    # Definición de la matriz de entrenamiento
+    X_train = np.vstack((resp_mfcc, heart_mfcc))
+    # Definición de la matriz de etiquetas de entrenamiento. Se define como
+    # 0 para respiración y 1 para corazón
+    Y_train =  np.array([0] * resp_mfcc.shape[0] +
+                        [1] * heart_mfcc.shape[0])
+    
+    # Reducción de dimensiones
+    pca = PCA(n_components=5)
+    X_pca = pca.fit_transform(X_train)
+    
+    '''%matplotlib notebook
+    for num, i in enumerate(X_pca):
+        if Y_train[num] == 0:
+            color = 'r'
+        elif Y_train[num] == 1:
+            color = 'b'
+        
+        plt.scatter(i[0], i[1], color=color)
+    '''
+    if classifier == 'knn':
+        clas = KNeighborsClassifier(n_neighbors=1, algorithm='auto')
+    elif classifier == 'svm':
+        clas = svm.SVC(kernel='linear', degree=50, gamma='auto')
+    
+    # Ajuste del clasificador
+    clas.fit(X_pca, Y_train)
+    
+    # Para cada componente
+    for comp_sound in comps:
+        for i in intervals:
+            # Definición de los límites a revisar para el sonido cardiaco
+            lower = i[0] // sr_ratio - N_lax
+            upper = i[1] // sr_ratio + N_lax
+            
+            hr_sound = comp_sound[lower:upper]
+            
+            # Se calcula su MFCC
+            mfcc_i = mfcc(np.asfortranarray(hr_sound), sr=samplerate, n_mfcc=n_mfcc).T
+            
+            # Y se transforma
+            mfcc_i = pca.transform(mfcc_i).mean(axis=0)
+            
+            plt.scatter(mfcc_i[0], mfcc_i[1], color='C2')
+                        
+            Y_pred = clas.predict(mfcc_i.reshape(1,-1))
+            print(Y_pred)
+     
+    plt.show()
+    return
+
+
+def spectral_correlation_test_2_OLD(W, signal_in, samplerate, N_lax, fcut, filepath_data, 
+                                measure='correlation', i_selection='max', threshold='mean'):
+    # Se obtienen los segmentos de sonido respiratorio
+    with open(f'{filepath_data}', 'r', encoding='utf8') as file:
+        intervals = literal_eval(file.readline())
+        
+    # Definición de la razón entre el samplerate original y el samplerate utilizado
+    sr_ratio = 44100 // samplerate
+    
+    # Definición de la lista de segmentos de sonido respiratorio
+    resp_list = list()
+    # Definición de los largos de cada elemento de la lista
+    len_list = list()
+    
+    # Variable auxiliar que indica el inicio de una señal
+    beg = 0
+    
+    for i in intervals:
+        # Definición de los límites a revisar
+        lower = beg // sr_ratio - N_lax if beg != 0 else 0
+        upper = i[0] // sr_ratio + N_lax
+        
+        # Segmento de señal respiratoria
+        resp_signal = signal_in[lower:upper]
+        
+        # Agregando a las listas
+        resp_list.append(resp_signal)
+        len_list.append(len(resp_signal))
+        
+        # Se redefine la variable auxiliar
+        beg = i[1]
+    
+    # Finalmente se agrega el segmento final
+    resp_signal = signal_in[i[1] // sr_ratio - N_lax:]
+    resp_list.append(resp_signal)
+    len_list.append(len(resp_signal))
+    
+    # Se elige el largo máximo de las listas, de tal forma que los periodogramas
+    # tengan un largo uniforme y sean paddeados con respecto a esto
+    max_len = max(W.shape[0], max(len_list))
+    
+    # Re acondicionando las señales
+    resp_dict = np.array([get_PSD(resp, samplerate, N=1024, noverlap=512)[1]
+                          for resp in resp_list])
+    W_reshape = np.array([resampling_by_points(W[:,i], samplerate, max_len) 
+                          for i in range(W.shape[1])]).T
+    
+    # Definición de la lista de booleanos de salida
+    S_i_list = list()
+    
+    # Definición del fcut_bin en base a la frecuencia de corte a considerar fcut
+    fcut_bin = int(max_len / (samplerate / 2) * fcut)
+    
+    '''%matplotlib notebook
+    for s in resp_dict:
+        plt.figure()
+        plt.plot(s)
+        plt.plot(W_reshape[:,12])
+    
+    plt.show()
+    return
+    '''
+    
+    for i in range(W_reshape.shape[1]):
+        # Se obtiene el bool correspondiente a la componente i. True si
+        # es sonido cardíaco y False si es sonido respiratorio
+        S_i = spectral_correlation_criteria(W_reshape[:,i], resp_dict, fcut_bin=fcut_bin, 
+                                            i_selection=i_selection,
+                                            measure=measure)
+        # Agregando...
+        S_i_list.append(S_i)
+    
+    # Transformando a array
+    S_i_array = np.array(S_i_list)
+        
+    # Definición de umbral
+    if threshold == 'mean':
+        threshold = np.mean(S_i_array)
+    
+    # Aplicando umbral
+    return S_i_array < threshold, S_i_array
+
 """

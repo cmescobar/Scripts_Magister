@@ -10,10 +10,11 @@ from matplotlib.widgets import Button
 from wavelet_functions import wavelet_denoising
 from fading_functions import fade_connect_signals, fading_signal
 from math_functions import wiener_filter, raised_cosine_fading
-from descriptor_functions import get_spectrogram, get_inverse_spectrogram, centroide
+from descriptor_functions import get_spectrogram, get_inverse_spectrogram
 from filter_and_sampling import resampling_by_points, lowpass_filter, downsampling_signal
-from clustering_functions import spectral_correlation_test, centroid_test,\
-    temporal_correlation_test, temporal_correlation_test_segment, machine_learning_clustering
+from clustering_functions import spectral_correlation_test, spectral_correlation_test_2_v2,\
+    energy_percentage_test, temporal_correlation_test, temporal_correlation_test_segment,\
+    machine_learning_clustering, p_percentage_energy
 
 
 def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=1024, 
@@ -1112,8 +1113,8 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method
     if n_components == 2 and not clustering:
         if assign_method == 'auto':
             # Se calculan los centroides
-            comp1_centroid = centroide(W[:,0])
-            comp2_centroid = centroide(W[:,1])
+            comp1_centroid = p_percentage_energy(W[:,0])
+            comp2_centroid = p_percentage_energy(W[:,1])
             
             # Definición de la decisión
             heart_dec = 0 if comp1_centroid >= comp2_centroid else 1
@@ -1124,7 +1125,7 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method
                           assign_method=assign_method)
             
             # Definición del texto a guardar
-            save_txt = ' centroid k2'
+            save_txt = ' energy_lim k2'
         
         elif assign_method == 'manual':
             # Decisión a tomar
@@ -1166,21 +1167,29 @@ def nmf_applied_all(dir_file, filepath_to_save_id, samplerate_des, assign_method
         
         
         if assign_method == 'auto':
-            # CRITERIO 1: Definición de la ubicación del diccionario
-            filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+            # Para CRITERIO 1: Definición de la ubicación del diccionario
+            # filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
             
             # Aplicación de los criterios
             ## CRITERIO 1: Correlación espectral
-            a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
+            '''a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
                                                     N=N, noverlap=noverlap, 
                                                     n_comps_dict=4, beta=beta, 
                                                     filepath_data=filepath_dict, 
                                                     padding=padding, repeat=repeat, 
                                                     measure=measure_spect_crit, 
-                                                    i_selection=i_selection, threshold='mean')
+                                                    i_selection=i_selection, threshold='mean')'''
+            
+            ## CRITERIO 1.2: Correlación espectral sonido respiratorio
+            a1_bool, a1 = spectral_correlation_test_2_v2(W, signal_to, samplerate_des, N_lax=50, 
+                                                        filepath_data=filename_heart_segments, 
+                                                        prom_spectra=False, 
+                                                        measure=measure_spect_crit, 
+                                                        i_selection=i_selection, 
+                                                        threshold='mean')
 
-            ## CRITERIO 2: Centroide espectral
-            a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+            ## CRITERIO 2: Porcentaje energético
+            a2_bool, a2 = energy_percentage_test(W, percentage=0.85)
             
             ## CRITERIO 3: Correlación temporal
             a3_bool, a3 = temporal_correlation_test(H, filename_heart_segments, samplerate, 
@@ -1438,21 +1447,21 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
         if plot_segments or assign_method == 'manual':
             if n_components == 2:
                 decision_in_plot = _plot_segments_nmf(signal_to, samplerate_des, comps, 
-                                                    W, H, N_fade, lower, upper, num, 
-                                                    filepath_to_save_name, assign_method)
+                                                      W, H, N_fade, lower, upper, num, 
+                                                      filepath_to_save_name, assign_method)
         
         # Método a implementar
         if n_components == 2 and not clustering:
             if assign_method == 'auto':
                 # Se calculan los centroides
-                comp1_centroid = centroide(W[:,0])
-                comp2_centroid = centroide(W[:,1])
+                comp1_centroid = p_percentage_energy(W[:,0])
+                comp2_centroid = p_percentage_energy(W[:,1])
                 
                 # Definición de la decisión
                 heart_decision = 0 if comp1_centroid >= comp2_centroid else 1
                 
                 # Definición del texto a guardar
-                save_txt = ' centroid k2'
+                save_txt = ' energy_lim k2'
             
             elif assign_method == 'manual':
                 # Se pregunta para la decisión del sonido cardíaco
@@ -1480,8 +1489,8 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
 
         elif n_components > 2 or clustering:
             if assign_method == 'auto':
-                # CRITERIO 1: Definición de la ubicación del diccionario
-                filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+                '''# CRITERIO 1: Definición de la ubicación del diccionario
+                # filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
 
                 # Aplicación de los criterios
                 ## CRITERIO 1: Correlación espectral
@@ -1491,10 +1500,20 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                                                         filepath_data=filepath_dict, 
                                                         padding=padding, repeat=repeat, 
                                                         measure=measure_spect_crit, 
-                                                        i_selection=i_selection, threshold='mean')
+                                                        i_selection=i_selection, threshold='mean')'''
                 
-                ## CRITERIO 2: Centroide espectral
-                a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+                ## CRITERIO 1.2: Correlación espectral sonido respiratorio
+                filepath_data = f'{segment_folder}/{name_file_segment}'
+                a1_bool, a1 = spectral_correlation_test_2_v2(W, signal_to, samplerate_des, 
+                                                            N_lax=N_lax, 
+                                                            filepath_data=filepath_data, 
+                                                            prom_spectra=False, 
+                                                            measure=measure_spect_crit, 
+                                                            i_selection=i_selection, 
+                                                            threshold='mean')
+                
+                ## CRITERIO 2: Porcentaje energético
+                a2_bool, a2 = energy_percentage_test(W, percentage=0.85)
                 
                 ## CRITERIO 3: Correlación temporal
                 a3_bool, a3 = \
@@ -1516,6 +1535,19 @@ def nmf_applied_interest_segments(dir_file, samplerate_des, assign_method='manua
                 
                 if only_centroid:
                     heart_dec = a2_bool
+                
+                '''print(heart_dec)
+                
+                plt.figure()
+                plt.subplot(1,2,1)
+                plt.plot(W[:,0])
+                plt.plot(W[:,1])
+                
+                plt.subplot(1,2,2)
+                plt.hist(W[:,0], bins=50)
+                plt.hist(W[:,1], bins=50)
+                plt.show()
+                plt.close()'''
                 
                 # Definición de las señales a grabar
                 heart_comps = np.zeros(len(comps[0]))
@@ -1748,14 +1780,14 @@ def nmf_applied_masked_segments(dir_file, samplerate_des, assign_method='manual'
     if n_components == 2 and not clustering:
         if assign_method == 'auto':
             # Se calculan los centroides
-            comp1_centroid = centroide(W[:,0])
-            comp2_centroid = centroide(W[:,1])
+            comp1_centroid = p_percentage_energy(W[:,0])
+            comp2_centroid = p_percentage_energy(W[:,1])
             
             # Definición de la decisión
             heart_decision = 0 if comp1_centroid >= comp2_centroid else 1
             
             # Definición del texto a guardar
-            save_txt = ' centroid k2'
+            save_txt = ' energy_lim k2'
 
         elif assign_method == 'manual':
             # Se pregunta para la decisión del sonido cardíaco
@@ -1811,9 +1843,6 @@ def nmf_applied_masked_segments(dir_file, samplerate_des, assign_method='manual'
     
     elif n_components > 2 or clustering:
         if assign_method == 'auto':
-            # CRITERIO 1: Definición de la ubicación del diccionario
-            filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
-            
             # Definición de la carpeta a revisar
             folder = f'{dir_file.split("/")[0]}'
             
@@ -1828,18 +1857,31 @@ def nmf_applied_masked_segments(dir_file, samplerate_des, assign_method='manual'
                 filename_heart_segments = f'{folder}/db_heart/Manual combinations v{version}/'\
                                           f'{ausc_zone}/{heart_segments} - segments.txt'
             
+            # Para CRITERIO 1: Definición de la ubicación del diccionario
+            # filepath_dict = f'Heart component dictionaries/{scale} scale decomposition'
+            
             # Aplicación de los criterios
             ## CRITERIO 1: Correlación espectral
-            a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
+            '''a1_bool, a1 = spectral_correlation_test(W, samplerate_des, fcut_spect_crit, 
                                                     N=N, noverlap=noverlap, 
                                                     n_comps_dict=4, beta=beta, 
                                                     filepath_data=filepath_dict, 
                                                     padding=padding, repeat=repeat, 
                                                     measure=measure_spect_crit, 
                                                     i_selection=i_selection, threshold='mean')
+            '''
             
-            ## CRITERIO 2: Centroide espectral
-            a2_bool, a2 = centroid_test(W, limit='upper', gamma=1)
+            ## CRITERIO 1.2: Correlación espectral sonido respiratorio
+            a1_bool, a1 = spectral_correlation_test_2_v2(W, signal_to, samplerate_des, 
+                                                        N_lax=N_lax, 
+                                                        filepath_data=filename_heart_segments, 
+                                                        prom_spectra=False, 
+                                                        measure=measure_spect_crit, 
+                                                        i_selection=i_selection, 
+                                                        threshold='mean')
+            
+            ## CRITERIO 2: Porcentaje energético
+            a2_bool, a2 = energy_percentage_test(W, percentage=0.85)
             
             ## CRITERIO 3: Correlación temporal
             a3_bool, a3 = temporal_correlation_test(H, filename_heart_segments, samplerate, 
@@ -2377,12 +2419,15 @@ def _plot_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assign_metho
         # Definición del valor a retornar
         to_return = callback_seleccion.value
         
+        plt.close()
         if to_return is None:
             print('Seleccione una opción...')
             return _plot_nmf(signal_in, samplerate, comps, W, H, 
                              filepath_to_save, assign_method)
         else:
-            return to_return 
+            return to_return
+    
+    plt.close()
 
 
 def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper, 
@@ -2480,13 +2525,18 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
         # Definición del valor a retornar
         to_return = callback_seleccion.value
         
+        # Cerrando
+        plt.close()
         if to_return is None:
             print('Seleccione una opción...')
             return _plot_segments_nmf(signal_in, samplerate, comps, W, H, 
                                       N_fade, lower, upper, 
                                       num, filepath_to_save, assign_method)
         else:
-            return to_return 
+            return to_return
+    
+    # Cerrando
+    plt.close()
 
 
 def _plot_segments_nmf_kmore(signal_in, heart_comps, resp_comps, N_fade, 
@@ -2610,12 +2660,15 @@ def _plot_masked_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assig
         # Definición del valor a retornar
         to_return = callback_seleccion.value
         
+        plt.close()
         if to_return is None:
             print('Seleccione una opción...')
             return _plot_masked_nmf(signal_in, samplerate, comps, W, H, 
                                     filepath_to_save, assign_method)
         else:
-            return to_return 
+            return to_return
+    
+    plt.close()
 
 
 def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision, 

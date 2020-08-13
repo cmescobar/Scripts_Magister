@@ -13,6 +13,10 @@ def centroide(signal_in):
     return sum([i*abs(signal_in[i]) for i in range(len(signal_in))]) / sum(abs(signal_in))
 
 
+def centroide_normalizado(signal_in):
+    return sum([i*abs(signal_in[i]) for i in range(len(signal_in))]) / len(signal_in)
+
+
 def promedio_aritmetico(signal_in):
     return sum(signal_in) / len(signal_in)
 
@@ -376,8 +380,8 @@ def get_inverse_spectrogram(X, N=None, padding=0, repeat=0, noverlap=0, window='
         sum_wind[beg:beg+N] += wind_mask
     
     # Se corta el padding agregado
-    inv_spect = inv_spect[N//2:-N//2]
-    sum_wind = sum_wind[N//2:-N//2]
+    inv_spect = inv_spect[N//2:-1*N//2]
+    sum_wind = sum_wind[N//2:-1*N//2]
     
     # Finalmente se aplica la normalización por la cantidad de veces que se
     # suma cada muestra en el proceso anterior producto del traslape,

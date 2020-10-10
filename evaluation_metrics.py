@@ -217,8 +217,8 @@ def HNRP(signal_original, signal_obtained):
         approach based on spectro-temporal clustering to extract heart sounds. 
         Applied Acoustics. Elsevier.
     '''
-    mixed = np.sum(signal_original ** 2)
-    free = np.sum(signal_obtained ** 2)
+    mixed = np.mean(signal_original ** 2)
+    free = np.mean(signal_obtained ** 2)
     return abs(mixed - free) / mixed
 
 
@@ -249,6 +249,10 @@ def performance_HNRP(hnrp, signal_hr, signal_heart):
     b = np.sum(signal_heart ** 2) / np.sum(signal_hr ** 2)
     
     return 1 - abs(b - hnrp) / b
+
+
+def get_correlation(signal_original, signal_obtained):
+    return _correlation(signal_original, signal_obtained)
 
 
 def psd_correlation(signal_original, signal_obtained, samplerate, window='hann', 

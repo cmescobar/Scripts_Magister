@@ -351,12 +351,12 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
         s2_labels = np.concatenate((s2_labels, s2_labels_to), axis=0)
     
     # Se concatenan las etiquetas para tener una sola variable "Y"
-    labels = np.concatenate((s1_labels, s2_labels), axis=1)
+    # labels = np.concatenate((s1_labels, s2_labels), axis=1)
     
     # Y finalmente es separan en train y test
-    X_train, X_test, Y_train, Y_test = train_test_split(audio_db, labels, 
-                                                        test_size=test_size,
-                                                        random_state=seed_split)
+    X_train, X_test, Y_train, Y_test = \
+        train_test_split(audio_db, np.concatenate((s1_labels, s2_labels), axis=1), 
+                        test_size=test_size, random_state=seed_split)
     
     return X_train, X_test, Y_train, Y_test
 

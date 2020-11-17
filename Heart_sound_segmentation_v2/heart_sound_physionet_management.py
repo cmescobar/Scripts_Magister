@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from scipy.io import wavfile, loadmat
 from filter_and_sampling import bandpass_filter
-from envelope_functions import get_envelope_pack
+from envelope_functions import get_envelope_pack, get_spectral_info
 from sklearn.model_selection import train_test_split
 from descriptor_functions import get_windowed_signal, get_noised_signal
 
@@ -15,7 +15,8 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
                            snr_expected=0, seed_snr=None, 
                            homomorphic_dict=None, hilbert_bool=False, 
                            simplicity_dict=None, vfd_dict=None, 
-                           wavelet_dict=None, spec_track_dict=None):
+                           wavelet_dict=None, spec_track_dict=None,
+                           append_fft=False):
     '''Función que, para un archivo especificado, permite obtener su 
     representación en matrices de delay y sus etiquetas.
     
@@ -75,6 +76,9 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
     spec_track_dict : dict, optional
         Diccionario con los parámetros de la función 
         'modified_spectral_tracking'. Por defecto es None.
+    append_fft : bool, optional
+        Booleano que indica si se agregan la FFT unilateral de audio. Por 
+        defecto es False.
         
     Returns
     -------
@@ -159,6 +163,16 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
                                             noverlap=noverlap,
                                             padding_value=padding_value)
     
+    # Opción de agregar su espectro de frecuencia
+    if append_fft:
+        # Obteniendo los coeficientes
+        spect_to = get_spectral_info(audio_info_matrix, N=N, 
+                                     normalize=True)
+        
+        # Agregando
+        audio_info_matrix = np.concatenate((audio_info_matrix, spect_to), axis=2)
+    
+    
     ## Etiquetas de los estados ##
     s1_matrix = get_windowed_signal(s1_labels, samplerate, N=N, 
                                     noverlap=noverlap, 
@@ -185,7 +199,8 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
                             apply_noise=False, snr_expected=0,
                             homomorphic_dict=None, hilbert_bool=False,
                             simplicity_dict=None, vfd_dict=None, 
-                            wavelet_dict=None, spec_track_dict=None):
+                            wavelet_dict=None, spec_track_dict=None,
+                            append_fft=False):
     '''Función que permite crear matrices de información y etiquetas en base a 
     los datos .wav y .mat de la carpeta db_folder para el problema de detección 
     de sonidos cardiacos.
@@ -232,6 +247,7 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
         q_dim = q_dim if spec_track_dict is None \
                       else q_dim + len(spec_track_dict['freq_obj'])
         q_dim = q_dim + 2 if hilbert_bool else q_dim
+        q_dim = q_dim + 1 if append_fft else q_dim
     
     # Definición de la matriz que concatenará la base de datos de audio
     audio_db = np.zeros((0, N, q_dim))
@@ -257,7 +273,8 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
                                    hilbert_bool=hilbert_bool, 
                                    simplicity_dict=simplicity_dict, 
                                    vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
-                                   spec_track_dict=spec_track_dict)
+                                   spec_track_dict=spec_track_dict, 
+                                   append_fft=append_fft)
         
         # Agregando la información a cada arreglo
         audio_db = np.concatenate((audio_db, audio_mat), axis=0)
@@ -272,7 +289,7 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
                    append_audio=True, append_envelopes=False, apply_bpfilter=False, 
                    bp_parameters=None, apply_noise=False, homomorphic_dict=None, 
                    hilbert_bool=False,simplicity_dict=None, vfd_dict=None, 
-                   wavelet_dict=None, spec_track_dict=None):
+                   wavelet_dict=None, spec_track_dict=None, append_fft=False):
     '''Función que permite generar la base de datos final que se usará
     como entrada al modelo.
     
@@ -315,7 +332,8 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
                                 simplicity_dict=simplicity_dict, 
                                 vfd_dict=vfd_dict, 
                                 wavelet_dict=wavelet_dict, 
-                                spec_track_dict=spec_track_dict)
+                                spec_track_dict=spec_track_dict, 
+                                append_fft=append_fft)
     
     
     # Definición de la semilla base
@@ -340,7 +358,8 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
                                     simplicity_dict=simplicity_dict, 
                                     vfd_dict=vfd_dict, 
                                     wavelet_dict=wavelet_dict, 
-                                    spec_track_dict=spec_track_dict)
+                                    spec_track_dict=spec_track_dict,
+                                    append_fft=append_fft)
         
         # Aumentando la semilla base
         seed_base += 10000

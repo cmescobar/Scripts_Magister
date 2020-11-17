@@ -1584,6 +1584,720 @@ def model_5_2_4(input_shape, padding_value, name=None):
     return model
 
 
-# model = model_5_2_4((128,3), padding_value=2, name='Testeo')
+def model_5_2_4_1(input_shape, padding_value, name=None):
+    '''Intento de modelo Convolutional Neural Networks + Fully Connected Layers 1.
+    Básicamente es el modelo 5_2_4, pero usando la regla de oro planteada en [1].
+    
+    Envolventes usadas:
+    - Sonido raw
+    - Filtros homomórficos
+    - Envolventes de Hilbert
+    - Wavelets multiescala
+    - Spectral tracking
+    - Simplicity envelope
+    - Variance Fractal Dimension
+    
+    Parameters
+    ----------
+    input_shape : tuple or list
+        Dimensión de un ejemplo de entrada.
+    padding_value : int
+        Valor con el que se realiza el padding de los últimos segmentos de cada sonido.
+    name : str or NoneType, optional
+        Nombre del modelo. Por defecto es None.
+        
+    Returns
+    -------
+    model : tensorflow.keras.Model
+        Modelo final de keras.
+    
+    References
+    ----------
+    [1] Gupta, C. N., Palaniappan, R., Rajan, S., Swaminathan, S., 
+        & Krishnan, S. M. (2005, May). Segmentation and classification 
+        of heart sounds. In Canadian Conference on Electrical and 
+        Computer Engineering, 2005. (pp. 1674-1677). IEEE.
+    '''    
+    # Definición de una lista auxiliar de las entradas y de capas FC de salida
+    x_in_list = list()
+    s1_list = list()
+    s2_list = list()
+    
+    # Aplicando una separación para cada canal
+    for i in range(input_shape[1]):        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=(input_shape[0], 1), dtype='float32',
+                              name=f'Input_ch{i+1}')
+        
+        # Agregando a la lista
+        x_in_list.append(x_in)
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value, 
+                                           input_shape=(input_shape[0], 1),
+                                           name=f'Masking_ch{i+1}')(x_in)
+    
+        # Definición de las capas convolucionales
+        ### Primer conv ###
+        x_conv1 = tf.keras.layers.Conv1D(filters=5, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv1_ch{i+1}')(x_masked)
+        x_conv1_norm = tf.keras.layers.BatchNormalization()(x_conv1)
+
+        ### Segundo conv ###
+        x_conv2 = tf.keras.layers.Conv1D(filters=10, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv2_ch{i+1}')(x_conv1_norm)
+        x_conv2_norm = tf.keras.layers.BatchNormalization()(x_conv2)
+
+        ### Tercer conv ###
+        x_conv3 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv3_ch{i+1}')(x_conv2_norm)
+        x_conv3_norm = tf.keras.layers.BatchNormalization()(x_conv3)
+
+        ### Cuarto conv ###
+        x_conv4 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv4_ch{i+1}')(x_conv3_norm)
+        x_conv4_norm = tf.keras.layers.BatchNormalization()(x_conv4)
+        
+        
+        # Definición de la capa de aplanamiento para conectar la CNN con la FCL 
+        x_flat = tf.keras.layers.Flatten()(x_conv4_norm)
+        
+        
+        # Definición de las capas fully connected
+        ### Fully Connected 1 ###
+        x_full1 = tf.keras.layers.Dense(units=30, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC1_ch{i+1}')(x_flat)
+        x_full1 = tf.keras.layers.BatchNormalization()(x_full1)
+
+        ### Fully Connected 2 ###
+        x_full2 = tf.keras.layers.Dense(units=80, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC2_ch{i+1}')(x_full1)
+        x_full2 = tf.keras.layers.BatchNormalization()(x_full2)
+
+        ### Fully Connected 3 ###
+        x_full3 = tf.keras.layers.Dense(units=70, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC3_ch{i+1}')(x_full2)
+        x_full3 = tf.keras.layers.BatchNormalization()(x_full3)
+
+        # Definición de las 2 capas de salida
+        s1_lay = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                       kernel_initializer='glorot_uniform',
+                                       name=f'S1_out_ch{i+1}')(x_full3)
+        s2_lay = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                       kernel_initializer='glorot_uniform',
+                                       name=f'S2_out_ch{i+1}')(x_full3)
+                
+        # Agregando a las listas
+        s1_list.append(s1_lay)
+        s2_list.append(s2_lay)
+    
+    # Definición de una capa de aplanamiento
+    s1_concat = tf.keras.layers.concatenate(s1_list, name='s1_concat')
+    s2_concat = tf.keras.layers.concatenate(s2_list, name='s2_concat')
+    
+    
+    # Definición de las 2 capas de salida
+    x_out_s1 = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                     kernel_initializer='glorot_uniform',
+                                     name='S1_out')(s1_concat)
+    x_out_s2 = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                     kernel_initializer='glorot_uniform',
+                                     name='S2_out')(s2_concat)
+    
+    # Creación del modelo final
+    model = tf.keras.Model(x_in_list, [x_out_s1, x_out_s2])
+    
+    return model
+
+
+def model_5_2_5(input_shape, padding_value, name=None):
+    '''Intento de modelo Convolutional Neural Networks + Fully Connected Layers 1.
+    Básicamente es el modelo 5_2_1, pero sin la capa lambda de dispersión. En este
+    caso se hace uso de una entrada distinta para cada envolvente, y además se aplica
+    una etapa sigmoide (como en el model_2_1) extra en cada canal.
+    
+    Envolventes usadas:
+    - Sonido raw
+    - Filtros homomórficos
+    - Envolventes de Hilbert
+    - Wavelets multiescala
+    - Spectral tracking
+    - Simplicity envelope
+    - Variance Fractal Dimension
+    - FFT
+    
+    Parameters
+    ----------
+    input_shape : tuple or list
+        Dimensión de un ejemplo de entrada.
+    padding_value : int
+        Valor con el que se realiza el padding de los últimos segmentos de cada sonido.
+    name : str or NoneType, optional
+        Nombre del modelo. Por defecto es None.
+        
+    Returns
+    -------
+    model : tensorflow.keras.Model
+        Modelo final de keras.
+    '''    
+    # Definición de una lista auxiliar de las entradas y de capas FC de salida
+    x_in_list = list()
+    s1_list = list()
+    s2_list = list()
+    
+    # Aplicando una separación para cada canal
+    for i in range(input_shape[1]):        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=(input_shape[0], 1), dtype='float32',
+                              name=f'Input_ch{i+1}')
+        
+        # Agregando a la lista
+        x_in_list.append(x_in)
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value, 
+                                           input_shape=(input_shape[0], 1),
+                                           name=f'Masking_ch{i+1}')(x_in)
+    
+        # Definición de las capas convolucionales
+        ### Primer conv ###
+        x_conv1 = tf.keras.layers.Conv1D(filters=5, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv1_ch{i+1}')(x_masked)
+        x_conv1_norm = tf.keras.layers.BatchNormalization()(x_conv1)
+
+        ### Segundo conv ###
+        x_conv2 = tf.keras.layers.Conv1D(filters=10, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv2_ch{i+1}')(x_conv1_norm)
+        x_conv2_norm = tf.keras.layers.BatchNormalization()(x_conv2)
+
+        ### Tercer conv ###
+        x_conv3 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv3_ch{i+1}')(x_conv2_norm)
+        x_conv3_norm = tf.keras.layers.BatchNormalization()(x_conv3)
+
+        ### Cuarto conv ###
+        x_conv4 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                        activation='relu', kernel_initializer='glorot_uniform', 
+                                        name=f'Conv4_ch{i+1}')(x_conv3_norm)
+        x_conv4_norm = tf.keras.layers.BatchNormalization()(x_conv4)
+        
+        
+        # Definición de la capa de aplanamiento para conectar la CNN con la FCL 
+        x_flat = tf.keras.layers.Flatten()(x_conv4_norm)
+        
+        
+        # Definición de las capas fully connected
+        ### Fully Connected 1 ###
+        x_full1 = tf.keras.layers.Dense(units=30, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC1_ch{i+1}')(x_flat)
+        x_full1 = tf.keras.layers.BatchNormalization()(x_full1)
+
+        ### Fully Connected 2 ###
+        x_full2 = tf.keras.layers.Dense(units=80, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC2_ch{i+1}')(x_full1)
+        x_full2 = tf.keras.layers.BatchNormalization()(x_full2)
+
+        ### Fully Connected 3 ###
+        x_full3 = tf.keras.layers.Dense(units=70, activation='relu',
+                                        kernel_initializer='glorot_uniform',
+                                        name=f'FC3_ch{i+1}')(x_full2)
+        x_full3 = tf.keras.layers.BatchNormalization()(x_full3)
+
+        # Definición de las 2 capas de salida
+        s1_lay = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                       kernel_initializer='glorot_uniform',
+                                       name=f'S1_out_ch{i+1}')(x_full3)
+        s2_lay = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                       kernel_initializer='glorot_uniform',
+                                       name=f'S2_out_ch{i+1}')(x_full3)
+                
+        # Agregando a las listas
+        s1_list.append(s1_lay)
+        s2_list.append(s2_lay)
+    
+    # Definición de una capa de aplanamiento
+    s1_concat = tf.keras.layers.concatenate(s1_list, name='s1_concat')
+    s2_concat = tf.keras.layers.concatenate(s2_list, name='s2_concat')
+    
+    
+    # Definición de las 2 capas de salida
+    x_out_s1 = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                     kernel_initializer='glorot_uniform',
+                                     name='S1_out')(s1_concat)
+    x_out_s2 = tf.keras.layers.Dense(units=1, activation='sigmoid', 
+                                     kernel_initializer='glorot_uniform',
+                                     name='S2_out')(s2_concat)
+    
+    # Creación del modelo final
+    model = tf.keras.Model(x_in_list, [x_out_s1, x_out_s2])
+    
+    return model
+
+
+def model_5_2_6(input_shape, padding_value, name=None):
+    '''Intento de modelo Convolutional Neural Networks + Fully Connected Layers 1.
+    Básicamente es el modelo 5_2_5, pero con ciertas modificaciones del orden de cada
+    capa. En primer lugar, se hace la capa CNN o FC, luego se aplica normalización, y
+    luego la activación ReLu o sigmoide.
+    Anterior: Capa -> Activación -> Normalización
+    Ahora:    Capa -> Normalización -> Activación
+    
+    Envolventes usadas:
+    - Sonido raw
+    - Filtros homomórficos
+    - Envolventes de Hilbert
+    - Wavelets multiescala
+    - Spectral tracking
+    - Simplicity envelope
+    - Variance Fractal Dimension
+    - FFT
+    
+    Parameters
+    ----------
+    input_shape : tuple or list
+        Dimensión de un ejemplo de entrada.
+    padding_value : int
+        Valor con el que se realiza el padding de los últimos segmentos de cada sonido.
+    name : str or NoneType, optional
+        Nombre del modelo. Por defecto es None.
+        
+    Returns
+    -------
+    model : tensorflow.keras.Model
+        Modelo final de keras.
+    '''    
+    # Definición de una lista auxiliar de las entradas y de capas FC de salida
+    x_in_list = list()
+    s1_list = list()
+    s2_list = list()
+    
+    # Aplicando una separación para cada canal
+    for i in range(input_shape[1]):        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=(input_shape[0], 1), dtype='float32',
+                              name=f'Input_ch{i+1}')
+        
+        # Agregando a la lista
+        x_in_list.append(x_in)
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value, 
+                                           input_shape=(input_shape[0], 1),
+                                           name=f'Masking_ch{i+1}')(x_in)
+
+        # Definición de las capas convolucionales
+        ### Primer conv ###
+        x_conv1 = tf.keras.layers.Conv1D(filters=5, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv1_ch{i+1}')(x_masked)
+        x_conv1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv1_ch{i+1}')(x_conv1)
+        x_conv1 = tf.keras.layers.Activation('relu', name=f'Act_Conv1_ch{i+1}')(x_conv1)
+
+        ### Segundo conv ###
+        x_conv2 = tf.keras.layers.Conv1D(filters=10, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv2_ch{i+1}')(x_conv1)
+        x_conv2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv2_ch{i+1}')(x_conv2)
+        x_conv2 = tf.keras.layers.Activation('relu', name=f'Act_Conv2_ch{i+1}')(x_conv2)
+
+        ### Tercer conv ###
+        x_conv3 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv3_ch{i+1}')(x_conv2)
+        x_conv3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv3_ch{i+1}')(x_conv3)
+        x_conv3 = tf.keras.layers.Activation('relu', name=f'Act_Conv3_ch{i+1}')(x_conv3)
+
+        ### Cuarto conv ###
+        x_conv4 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv4_ch{i+1}')(x_conv3)
+        x_conv4 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv4_ch{i+1}')(x_conv4)
+        x_conv4 = tf.keras.layers.Activation('relu', name=f'Act_Conv4_ch{i+1}')(x_conv4)
+        
+        
+        # Definición de la capa de aplanamiento para conectar la CNN con la FCL 
+        x_flat = tf.keras.layers.Flatten()(x_conv4)
+        
+        
+        # Definición de las capas fully connected
+        ### Fully Connected 1 ###
+        x_full1 = tf.keras.layers.Dense(units=30, kernel_initializer='glorot_uniform',
+                                        name=f'FC1_ch{i+1}')(x_flat)
+        x_full1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC1_ch{i+1}')(x_full1)
+        x_full1 = tf.keras.layers.Activation('relu', name=f'Act_FC1_ch{i+1}')(x_full1)
+
+        ### Fully Connected 2 ###
+        x_full2 = tf.keras.layers.Dense(units=80, kernel_initializer='glorot_uniform',
+                                        name=f'FC2_ch{i+1}')(x_full1)
+        x_full2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC2_ch{i+1}')(x_full2)
+        x_full2 = tf.keras.layers.Activation('relu', name=f'Act_FC2_ch{i+1}')(x_full2)
+
+        ### Fully Connected 3 ###
+        x_full3 = tf.keras.layers.Dense(units=70, kernel_initializer='glorot_uniform',
+                                        name=f'FC3_ch{i+1}')(x_full2)
+        x_full3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC3_ch{i+1}')(x_full3)
+        x_full3 = tf.keras.layers.Activation('relu', name=f'Act_FC3_ch{i+1}')(x_full3)
+
+        
+        ### Output layers por canal ###
+        # Definición de la capa de salida S1 para el canal i
+        s1_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S1_ch{i+1}')(x_full3)
+        s1_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S1_ch{i+1}')(s1_lay)
+        s1_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S1_ch{i+1}')(s1_lay)
+        
+        # Definición de la capa de salida S2
+        s2_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S2_ch{i+1}')(x_full3)
+        s2_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S2_ch{i+1}')(s2_lay)
+        s2_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S2_ch{i+1}')(s2_lay)
+        
+        # Agregando a las listas
+        s1_list.append(s1_lay)
+        s2_list.append(s2_lay)
+
+    ### Final layers ###
+    
+    # Definición de una capa de aplanamiento
+    s1_concat = tf.keras.layers.concatenate(s1_list, name='s1_concat')
+    s2_concat = tf.keras.layers.concatenate(s2_list, name='s2_concat')
+    
+    
+    # Salida final para S1
+    x_out_s1 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S1_out_Dense')(s1_concat)
+    x_out_s1 = tf.keras.layers.BatchNormalization(name='S1_out_Batchnorm')(x_out_s1)
+    x_out_s1 = tf.keras.layers.Activation('sigmoid', name='S1_out_Act')(x_out_s1)
+    
+    # Salida final para S2
+    x_out_s2 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S2_out_Dense')(s2_concat)
+    x_out_s2 = tf.keras.layers.BatchNormalization(name='S2_out_Batchnorm')(x_out_s2)
+    x_out_s2 = tf.keras.layers.Activation('sigmoid', name='S2_out_Act')(x_out_s2)
+    
+    # Creación del modelo final
+    model = tf.keras.Model(x_in_list, [x_out_s1, x_out_s2])
+    
+    return model
+
+
+def model_5_2_7(input_shape, padding_value, name=None):
+    '''Intento de modelo Convolutional Neural Networks + Fully Connected Layers 1.
+    Básicamente es el modelo 5_2_6, pero ahora con dropout a la salida de la capa 
+    de activación.
+    
+    Envolventes usadas:
+    - Sonido raw
+    - Filtros homomórficos
+    - Envolventes de Hilbert
+    - Wavelets multiescala
+    - Spectral tracking
+    - Simplicity envelope
+    - Variance Fractal Dimension
+    - FFT
+    
+    Parameters
+    ----------
+    input_shape : tuple or list
+        Dimensión de un ejemplo de entrada.
+    padding_value : int
+        Valor con el que se realiza el padding de los últimos segmentos de cada sonido.
+    name : str or NoneType, optional
+        Nombre del modelo. Por defecto es None.
+        
+    Returns
+    -------
+    model : tensorflow.keras.Model
+        Modelo final de keras.
+    '''    
+    # Definición de una lista auxiliar de las entradas y de capas FC de salida
+    x_in_list = list()
+    s1_list = list()
+    s2_list = list()
+    
+    # Aplicando una separación para cada canal
+    for i in range(input_shape[1]):        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=(input_shape[0], 1), dtype='float32',
+                              name=f'Input_ch{i+1}')
+        
+        # Agregando a la lista
+        x_in_list.append(x_in)
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value, 
+                                           input_shape=(input_shape[0], 1),
+                                           name=f'Masking_ch{i+1}')(x_in)
+
+        # Definición de las capas convolucionales
+        ### Primer conv ###
+        x_conv1 = tf.keras.layers.Conv1D(filters=5, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv1_ch{i+1}')(x_masked)
+        x_conv1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv1_ch{i+1}')(x_conv1)
+        x_conv1 = tf.keras.layers.Activation('relu', name=f'Act_Conv1_ch{i+1}')(x_conv1)
+        x_conv1 = tf.keras.layers.Dropout(0.1)(x_conv1)
+
+        
+        ### Segundo conv ###
+        x_conv2 = tf.keras.layers.Conv1D(filters=10, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv2_ch{i+1}')(x_conv1)
+        x_conv2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv2_ch{i+1}')(x_conv2)
+        x_conv2 = tf.keras.layers.Activation('relu', name=f'Act_Conv2_ch{i+1}')(x_conv2)
+        x_conv2 = tf.keras.layers.Dropout(0.1)(x_conv2)
+
+        
+        ### Tercer conv ###
+        x_conv3 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv3_ch{i+1}')(x_conv2)
+        x_conv3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv3_ch{i+1}')(x_conv3)
+        x_conv3 = tf.keras.layers.Activation('relu', name=f'Act_Conv3_ch{i+1}')(x_conv3)
+        x_conv3 = tf.keras.layers.Dropout(0.1)(x_conv3)
+
+        
+        ### Cuarto conv ###
+        x_conv4 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv4_ch{i+1}')(x_conv3)
+        x_conv4 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv4_ch{i+1}')(x_conv4)
+        x_conv4 = tf.keras.layers.Activation('relu', name=f'Act_Conv4_ch{i+1}')(x_conv4)
+        x_conv4 = tf.keras.layers.Dropout(0.1)(x_conv4)
+        
+        # Definición de la capa de aplanamiento para conectar la CNN con la FCL 
+        x_flat = tf.keras.layers.Flatten()(x_conv4)
+        
+        
+        # Definición de las capas fully connected
+        ### Fully Connected 1 ###
+        x_full1 = tf.keras.layers.Dense(units=30, kernel_initializer='glorot_uniform',
+                                        name=f'FC1_ch{i+1}')(x_flat)
+        x_full1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC1_ch{i+1}')(x_full1)
+        x_full1 = tf.keras.layers.Activation('relu', name=f'Act_FC1_ch{i+1}')(x_full1)
+        x_full1 = tf.keras.layers.Dropout(0.1)(x_full1)
+
+        ### Fully Connected 2 ###
+        x_full2 = tf.keras.layers.Dense(units=80, kernel_initializer='glorot_uniform',
+                                        name=f'FC2_ch{i+1}')(x_full1)
+        x_full2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC2_ch{i+1}')(x_full2)
+        x_full2 = tf.keras.layers.Activation('relu', name=f'Act_FC2_ch{i+1}')(x_full2)
+        x_full2 = tf.keras.layers.Dropout(0.1)(x_full2)
+
+        ### Fully Connected 3 ###
+        x_full3 = tf.keras.layers.Dense(units=70, kernel_initializer='glorot_uniform',
+                                        name=f'FC3_ch{i+1}')(x_full2)
+        x_full3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC3_ch{i+1}')(x_full3)
+        x_full3 = tf.keras.layers.Activation('relu', name=f'Act_FC3_ch{i+1}')(x_full3)
+        x_full3 = tf.keras.layers.Dropout(0.1)(x_full3)
+
+        
+        ### Output layers por canal ###
+        # Definición de la capa de salida S1 para el canal i
+        s1_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S1_ch{i+1}')(x_full3)
+        s1_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S1_ch{i+1}')(s1_lay)
+        s1_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S1_ch{i+1}')(s1_lay)
+        
+        # Definición de la capa de salida S2
+        s2_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S2_ch{i+1}')(x_full3)
+        s2_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S2_ch{i+1}')(s2_lay)
+        s2_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S2_ch{i+1}')(s2_lay)
+        
+        # Agregando a las listas
+        s1_list.append(s1_lay)
+        s2_list.append(s2_lay)
+
+    ### Final layers ###
+    
+    # Definición de una capa de aplanamiento
+    s1_concat = tf.keras.layers.concatenate(s1_list, name='s1_concat')
+    s2_concat = tf.keras.layers.concatenate(s2_list, name='s2_concat')
+    
+    
+    # Salida final para S1
+    x_out_s1 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S1_out_Dense')(s1_concat)
+    x_out_s1 = tf.keras.layers.BatchNormalization(name='S1_out_Batchnorm')(x_out_s1)
+    x_out_s1 = tf.keras.layers.Activation('sigmoid', name='S1_out_Act')(x_out_s1)
+    
+    # Salida final para S2
+    x_out_s2 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S2_out_Dense')(s2_concat)
+    x_out_s2 = tf.keras.layers.BatchNormalization(name='S2_out_Batchnorm')(x_out_s2)
+    x_out_s2 = tf.keras.layers.Activation('sigmoid', name='S2_out_Act')(x_out_s2)
+    
+    # Creación del modelo final
+    model = tf.keras.Model(x_in_list, [x_out_s1, x_out_s2])
+    
+    return model
+
+
+def model_5_2_8(input_shape, padding_value, name=None):
+    '''Intento de modelo Convolutional Neural Networks + Fully Connected Layers 1.
+    Básicamente es el modelo 5_2_7, pero ahora con dropout 0.2.
+    
+    Envolventes usadas:
+    - Sonido raw
+    - Filtros homomórficos
+    - Envolventes de Hilbert
+    - Wavelets multiescala
+    - Spectral tracking
+    - Simplicity envelope
+    - Variance Fractal Dimension
+    - FFT
+    
+    Parameters
+    ----------
+    input_shape : tuple or list
+        Dimensión de un ejemplo de entrada.
+    padding_value : int
+        Valor con el que se realiza el padding de los últimos segmentos de cada sonido.
+    name : str or NoneType, optional
+        Nombre del modelo. Por defecto es None.
+        
+    Returns
+    -------
+    model : tensorflow.keras.Model
+        Modelo final de keras.
+    '''    
+    # Definición de una lista auxiliar de las entradas y de capas FC de salida
+    x_in_list = list()
+    s1_list = list()
+    s2_list = list()
+    
+    # Aplicando una separación para cada canal
+    for i in range(input_shape[1]):        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=(input_shape[0], 1), dtype='float32',
+                              name=f'Input_ch{i+1}')
+        
+        # Agregando a la lista
+        x_in_list.append(x_in)
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value, 
+                                           input_shape=(input_shape[0], 1),
+                                           name=f'Masking_ch{i+1}')(x_in)
+
+        # Definición de las capas convolucionales
+        ### Primer conv ###
+        x_conv1 = tf.keras.layers.Conv1D(filters=5, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv1_ch{i+1}')(x_masked)
+        x_conv1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv1_ch{i+1}')(x_conv1)
+        x_conv1 = tf.keras.layers.Activation('relu', name=f'Act_Conv1_ch{i+1}')(x_conv1)
+        x_conv1 = tf.keras.layers.Dropout(0.2)(x_conv1)
+
+        
+        ### Segundo conv ###
+        x_conv2 = tf.keras.layers.Conv1D(filters=10, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv2_ch{i+1}')(x_conv1)
+        x_conv2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv2_ch{i+1}')(x_conv2)
+        x_conv2 = tf.keras.layers.Activation('relu', name=f'Act_Conv2_ch{i+1}')(x_conv2)
+        x_conv2 = tf.keras.layers.Dropout(0.2)(x_conv2)
+
+        
+        ### Tercer conv ###
+        x_conv3 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv3_ch{i+1}')(x_conv2)
+        x_conv3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv3_ch{i+1}')(x_conv3)
+        x_conv3 = tf.keras.layers.Activation('relu', name=f'Act_Conv3_ch{i+1}')(x_conv3)
+        x_conv3 = tf.keras.layers.Dropout(0.2)(x_conv3)
+
+        
+        ### Cuarto conv ###
+        x_conv4 = tf.keras.layers.Conv1D(filters=20, kernel_size=100, padding='same', 
+                                         kernel_initializer='glorot_uniform', 
+                                         name=f'Conv4_ch{i+1}')(x_conv3)
+        x_conv4 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_Conv4_ch{i+1}')(x_conv4)
+        x_conv4 = tf.keras.layers.Activation('relu', name=f'Act_Conv4_ch{i+1}')(x_conv4)
+        x_conv4 = tf.keras.layers.Dropout(0.2)(x_conv4)
+        
+        # Definición de la capa de aplanamiento para conectar la CNN con la FCL 
+        x_flat = tf.keras.layers.Flatten()(x_conv4)
+        
+        
+        # Definición de las capas fully connected
+        ### Fully Connected 1 ###
+        x_full1 = tf.keras.layers.Dense(units=30, kernel_initializer='glorot_uniform',
+                                        name=f'FC1_ch{i+1}')(x_flat)
+        x_full1 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC1_ch{i+1}')(x_full1)
+        x_full1 = tf.keras.layers.Activation('relu', name=f'Act_FC1_ch{i+1}')(x_full1)
+        x_full1 = tf.keras.layers.Dropout(0.2)(x_full1)
+
+        ### Fully Connected 2 ###
+        x_full2 = tf.keras.layers.Dense(units=80, kernel_initializer='glorot_uniform',
+                                        name=f'FC2_ch{i+1}')(x_full1)
+        x_full2 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC2_ch{i+1}')(x_full2)
+        x_full2 = tf.keras.layers.Activation('relu', name=f'Act_FC2_ch{i+1}')(x_full2)
+        x_full2 = tf.keras.layers.Dropout(0.2)(x_full2)
+
+        ### Fully Connected 3 ###
+        x_full3 = tf.keras.layers.Dense(units=70, kernel_initializer='glorot_uniform',
+                                        name=f'FC3_ch{i+1}')(x_full2)
+        x_full3 = tf.keras.layers.BatchNormalization(name=f'Batchnorm_FC3_ch{i+1}')(x_full3)
+        x_full3 = tf.keras.layers.Activation('relu', name=f'Act_FC3_ch{i+1}')(x_full3)
+        x_full3 = tf.keras.layers.Dropout(0.2)(x_full3)
+
+        
+        ### Output layers por canal ###
+        # Definición de la capa de salida S1 para el canal i
+        s1_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S1_ch{i+1}')(x_full3)
+        s1_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S1_ch{i+1}')(s1_lay)
+        s1_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S1_ch{i+1}')(s1_lay)
+        
+        # Definición de la capa de salida S2
+        s2_lay = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                       name=f'Dense_S2_ch{i+1}')(x_full3)
+        s2_lay = tf.keras.layers.BatchNormalization(name=f'Batchnorm_S2_ch{i+1}')(s2_lay)
+        s2_lay = tf.keras.layers.Activation('sigmoid', name=f'Act_S2_ch{i+1}')(s2_lay)
+        
+        # Agregando a las listas
+        s1_list.append(s1_lay)
+        s2_list.append(s2_lay)
+
+    ### Final layers ###
+    
+    # Definición de una capa de aplanamiento
+    s1_concat = tf.keras.layers.concatenate(s1_list, name='s1_concat')
+    s2_concat = tf.keras.layers.concatenate(s2_list, name='s2_concat')
+    
+    
+    # Salida final para S1
+    x_out_s1 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S1_out_Dense')(s1_concat)
+    x_out_s1 = tf.keras.layers.BatchNormalization(name='S1_out_Batchnorm')(x_out_s1)
+    x_out_s1 = tf.keras.layers.Activation('sigmoid', name='S1_out_Act')(x_out_s1)
+    
+    # Salida final para S2
+    x_out_s2 = tf.keras.layers.Dense(units=1, kernel_initializer='glorot_uniform',
+                                     name='S2_out_Dense')(s2_concat)
+    x_out_s2 = tf.keras.layers.BatchNormalization(name='S2_out_Batchnorm')(x_out_s2)
+    x_out_s2 = tf.keras.layers.Activation('sigmoid', name='S2_out_Act')(x_out_s2)
+    
+    # Creación del modelo final
+    model = tf.keras.Model(x_in_list, [x_out_s1, x_out_s2])
+    
+    return model
+
+
+# model = model_5_2_6((128,3), padding_value=2, name='Testeo')
 # print(model.summary())
 # tf.keras.utils.plot_model(model, to_file='Testeo.png', show_shapes=True, expand_nested=True)

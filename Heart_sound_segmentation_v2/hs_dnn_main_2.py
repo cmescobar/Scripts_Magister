@@ -1,18 +1,21 @@
 __author__ = 'Christian Escobar Arce'
 
 import os
+import numpy as np
 import tensorflow as tf
 from heart_sound_DNN_models import model_2_1, model_2_2, model_2_3, model_2_4, \
     model_2_5, model_2_6, model_2_7, model_2_8, model_3, model_4_1, model_4_2, \
     model_4_3, model_4_4, model_5_1, model_5_1_1, model_5_2_1, model_5_2_2, \
-    model_5_2_3, model_5_2_4
+    model_5_2_3, model_5_2_4, model_5_2_4_1, model_5_2_5, model_5_2_6, model_5_2_7, \
+    model_5_2_8
 from heart_sound_physionet_management import get_model_data
 
 
 # Función que permitirá iterar sobre cada modelo, sin sobrepasar los límites de memoria
-def model_iteration(model, model_name, ind_beg_iter, ind_end_iter):
+def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_test,
+                    test_on_iter=True):
     # Definición de los datos de entrenamiento y testeo
-    X_train, X_test, Y_train, Y_test = \
+    X_train, X_test_to, Y_train, Y_test_to = \
         get_model_data(db_folder, test_size=test_size, seed_split=seed_split, 
                        snr_list=snr_list, ind_beg=ind_beg_iter, ind_end=ind_end_iter, N=N, 
                        noverlap=N-step, padding_value=padding_value, 
@@ -22,8 +25,12 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter):
                        homomorphic_dict=homomorphic_dict, hilbert_bool=hilbert_bool,
                        simplicity_dict=simplicity_dict, 
                        vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
-                       spec_track_dict=spec_track_dict)
+                       spec_track_dict=spec_track_dict, append_fft=append_fft)
 
+    # Concatenando la información de test
+    X_test = np.concatenate((X_test, X_test_to), axis=0)
+    Y_test = np.concatenate((Y_test, Y_test_to), axis=0)
+    
     # Entrenando
     if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
                       'Model_2_2', 'Model_2_3', 'Model_2_4', 'Model_2_5', 'Model_2_6', 'Model_2_7',
@@ -33,37 +40,43 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter):
         history = model.fit(x=X_train, y=[Y_train[:,0], Y_train[:,1]], epochs=epochs, 
                             batch_size=batch_size, verbose=1, validation_split=validation_split)
 
-        print('\nTesting time\n------------\n')
-        eval_info = model.evaluate(x=X_test, y=[Y_test[:,0], Y_test[:,1]], verbose=1,
-                                   return_dict=True)
+        if test_on_iter:
+            print('\nTesting time\n------------\n')
+            eval_info = model.evaluate(x=X_test, y=[Y_test[:,0], Y_test[:,1]], verbose=1,
+                                    return_dict=True)
     
-    elif model_name in ['Model_5_2_3', 'Model_5_2_4']:
+    elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
+                        'Model_5_2_7', 'Model_5_2_8']:
         print('\nTraining time\n------------\n')
         history = model.fit(x=[X_train[:, :, i] for i in range(X_train.shape[2])], 
                             y=[Y_train[:,0], Y_train[:,1]], epochs=epochs, 
                             batch_size=batch_size, verbose=1, validation_split=validation_split)
 
-        print('\nTesting time\n------------\n')
-        eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
-                                   y=[Y_test[:,0], Y_test[:,1]], verbose=1,
-                                   return_dict=True)
+        if test_on_iter:
+            print('\nTesting time\n------------\n')
+            eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
+                                    y=[Y_test[:,0], Y_test[:,1]], verbose=1,
+                                    return_dict=True)
     
     elif model_name in ['Model_3']:
         print('\nTraining time\n------------\n')
         history = model.fit(x=X_train, y=Y_train[:,0] + Y_train[:,1], epochs=epochs, 
                             batch_size=batch_size, verbose=1, validation_split=validation_split)
 
-        # Evaluando
-        print('\nTesting time\n------------\n')
-        eval_info = model.evaluate(x=X_test, y=Y_test[:,0] + Y_test[:,1], verbose=1,
-                                   return_dict=True)
+        if test_on_iter:
+            print('\nTesting time\n------------\n')
+            eval_info = model.evaluate(x=X_test, y=Y_test[:,0] + Y_test[:,1], verbose=1,
+                                    return_dict=True)
 
     # Y guardando la información del entrenamiento con el testeo
     with open(f'Models/{model_name}.txt', 'a', encoding='utf8') as file:
-        file.write(f'{history.history},')
-        file.write(f'{eval_info}\n')
+        file.write(f'{history.history}')
+        if test_on_iter:
+            file.write(f';{eval_info}\n')
+        else:
+            file.write('\n')
         
-    return model
+    return model, X_test, Y_test
 
 
 
@@ -108,13 +121,14 @@ vfd_dict = {'N': 64, 'noverlap': 32, 'kmin': 2, 'kmax': 2, 'step_size_method': '
 wavelet_dict = {'wavelet': 'db4', 'levels': [2,3,4], 'start_level': 1, 'end_level': 4}
 spec_track_dict = {'freq_obj': [100, 150], 'N': 128, 'noverlap': 100, 'padding': 0, 
                    'repeat': 0, 'window': 'hann'}
+append_fft = True
 
 
 # Parámetros de Red neuronal
 validation_split = 0.1
 batch_size = 70 
 epochs = 10
-model_name = 'Model_5_2_4'
+model_name = 'Model_5_2_8'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
@@ -155,7 +169,8 @@ get_model_data_info = {'test_size': test_size, 'seed_split': seed_split,
                        'hilbert_bool': hilbert_bool, 
                        'simplicity_dict': simplicity_dict, 
                        'vfd_dict': vfd_dict, 'wavelet_dict': wavelet_dict,
-                       'spec_track_dict': spec_track_dict}
+                       'spec_track_dict': spec_track_dict, 
+                       'append_fft': append_fft}
 
 # Definiendo los parámetros especificados para la función de costo
 loss_func_info = {'optimizer': optimizer, 'loss': loss_func, 'metrics': metrics,
@@ -182,7 +197,8 @@ X_train, X_test, Y_train, Y_test = \
                    homomorphic_dict=homomorphic_dict, hilbert_bool=hilbert_bool,
                    simplicity_dict=simplicity_dict, 
                    vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
-                   spec_track_dict=spec_track_dict)
+                   spec_track_dict=spec_track_dict, 
+                   append_fft=append_fft)
 
 
 # Imprimiendo la dimensión de los archivos
@@ -269,12 +285,33 @@ elif model_name == 'Model_5_2_4':
     model = model_5_2_4(input_shape=(X_train.shape[1], X_train.shape[2]),
                         padding_value=padding_value, name=model_name)
 
+elif model_name == 'Model_5_2_4_1':
+    model = model_5_2_4_1(input_shape=(X_train.shape[1], X_train.shape[2]),
+                          padding_value=padding_value, name=model_name)
+
+elif model_name == 'Model_5_2_5':
+    model = model_5_2_5(input_shape=(X_train.shape[1], X_train.shape[2]),
+                        padding_value=padding_value, name=model_name)
+    
+elif model_name == 'Model_5_2_6':
+    model = model_5_2_6(input_shape=(X_train.shape[1], X_train.shape[2]),
+                        padding_value=padding_value, name=model_name)
+    
+elif model_name == 'Model_5_2_7':
+    model = model_5_2_7(input_shape=(X_train.shape[1], X_train.shape[2]),
+                        padding_value=padding_value, name=model_name)
+
+elif model_name == 'Model_5_2_8':
+    model = model_5_2_8(input_shape=(X_train.shape[1], X_train.shape[2]),
+                        padding_value=padding_value, name=model_name)
+
 # Compilando las opciones del modelo
 if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
                   'Model_2_2', 'Model_2_3', 'Model_2_4', 'Model_2_5', 'Model_2_6', 'Model_2_7', 
                   'Model_2_7_2', 'Model_2_8', 'Model_4_1', 'Model_4_2', 'Model_4_3', 'Model_4_4', 
                   'Model_5_1', 'Model_5_1_1', 'Model_5_2_1', 'Model_5_2_2', 'Model_5_2_3', 
-                  'Model_5_2_4']:
+                  'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6', 'Model_5_2_7',
+                  'Model_5_2_8']:
     loss_model = [loss_func, loss_func]
 
 elif model_name in ['Model_3']:
@@ -310,6 +347,11 @@ else:
 open(f'Models/{model_name}.txt', 'w', encoding='utf8').close()
 
 
+# Definición de la información de test final
+X_test = np.zeros((0, X_train.shape[1], X_train.shape[2]))
+Y_test = np.zeros((0, Y_train.shape[1]))
+
+
 # Realizando las iteraciones
 for i in range(n_iter):
     # Definición de los intervalos a revisar
@@ -325,7 +367,35 @@ for i in range(n_iter):
 
     
     # Aplicando la iteración
-    model = model_iteration(model, model_name, ind_beg_iter, ind_end_iter)
-    
+    model, X_test, Y_test = model_iteration(model, model_name, ind_beg_iter, 
+                                            ind_end_iter, X_test, Y_test, 
+                                            test_on_iter=False)
+
 # Guardando el modelo
 model.save(f'Models/{model_name}.h5')
+
+# Testeando
+if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
+                    'Model_2_2', 'Model_2_3', 'Model_2_4', 'Model_2_5', 'Model_2_6', 'Model_2_7',
+                    'Model_2_7_2', 'Model_2_8', 'Model_4_1', 'Model_4_2', 'Model_4_3', 'Model_4_4',
+                    'Model_5_1', 'Model_5_1_1', 'Model_5_2_1', 'Model_5_2_2']:
+    print('\nTesting time\n------------\n')
+    eval_info = model.evaluate(x=X_test, y=[Y_test[:,0], Y_test[:,1]], verbose=1,
+                               return_dict=True)
+
+elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
+                    'Model_5_2_7', 'Model_5_2_8']:
+    print('\nTesting time\n------------\n')
+    eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
+                            y=[Y_test[:,0], Y_test[:,1]], verbose=1,
+                            return_dict=True)
+
+elif model_name in ['Model_3']:
+    print('\nTesting time\n------------\n')
+    eval_info = model.evaluate(x=X_test, y=Y_test[:,0] + Y_test[:,1], verbose=1,
+                                return_dict=True)
+
+
+# Y guardando la información del entrenamiento con el testeo
+with open(f'Models/{model_name}.txt', 'a', encoding='utf8') as file:
+    file.write(f'Testing_info: {eval_info}\n')

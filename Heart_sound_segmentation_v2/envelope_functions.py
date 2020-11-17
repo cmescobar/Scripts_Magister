@@ -552,6 +552,45 @@ def modified_spectral_tracking(signal_in, samplerate, freq_obj=[150, 200], N=512
     return spectral_trackings
 
 
+def get_spectral_info(signal_windowed, N=128, ind_audio=0, normalize=True):
+    '''Función que permite obtener la fft sobre una señal ventaneada.
+    
+    Parameters
+    ----------
+    signal_windowed : ndarray
+        Señal ventaneada.
+    N : int, optional
+        Cantidad de puntos de padding. Por defecto es 128.
+    normalize : bool, optional
+        Normalización de la señal. Por defecto es True.
+        
+    Returns
+    -------
+    fft_windowed : ndarray
+        FFT unilateral de la señal ventaneada.
+    '''
+    # Definición de una matriz de padding del doble de largo
+    to_pad = np.zeros((signal_windowed.shape[0], N))    
+    
+    # Aplicando el padding
+    if signal_windowed.ndim > 2:
+        signal_to = np.concatenate((signal_windowed[:, :, ind_audio], to_pad), 
+                                   axis=1)
+    else:
+        signal_to = np.concatenate((signal_windowed, to_pad), axis=1)
+    
+    # Cálculo de la magnitud de la FFT
+    fft_windowed = abs(np.fft.fft(signal_to))
+    
+    # Normalizando
+    if normalize:
+        # Se resta el mínimo y se normaliza (para dejarlo entre 0 y 1)
+        fft_windowed = (fft_windowed.T - fft_windowed.min(axis=1)).T
+        fft_windowed = (fft_windowed.T / fft_windowed.max(axis=1)).T
+    
+    return np.expand_dims(fft_windowed[:,:N], -1)
+
+
 def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None, 
                       hilbert_bool=False, simplicity_dict=None, 
                       vfd_dict=None, wavelet_dict=None, 

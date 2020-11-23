@@ -9,13 +9,14 @@ from descriptor_functions import get_windowed_signal, get_noised_signal
 
 
 def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2, 
-                           activation_percentage=0.5, append_audio=True, 
+                           activation_percentage=None, append_audio=True, 
                            append_envelopes=False, apply_bpfilter=False,
                            bp_parameters=None, apply_noise=False, 
                            snr_expected=0, seed_snr=None, 
-                           homomorphic_dict=None, hilbert_bool=False, 
+                           homomorphic_dict=None, hilbert_dict=None, 
                            simplicity_dict=None, vfd_dict=None, 
                            wavelet_dict=None, spec_track_dict=None,
+                           spec_energy_dict=None, norm_type='minmax',
                            append_fft=False):
     '''Función que, para un archivo especificado, permite obtener su 
     representación en matrices de delay y sus etiquetas.
@@ -37,7 +38,8 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
         Porcentaje de activación para el ventaneo de la señal etiqueta
         en la transformación a etiqueta por ventana. Si la presencia del
         sonido s1 o s2 (con valor 1) es mayor que este porcentaje en cada
-        ventana, se considera válido. Por defecto es 50%.
+        ventana, se considera válido. Por defecto es None. Si es None, no
+        se aplica reducción de la ventana a una sola etiqueta.
     append_audio : bool, optional
         Booleano que indica si se agrega el archivo de audio raw. Por defecto 
         es True.
@@ -61,9 +63,16 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
     homomorphic_dict : dict, optional
         Diccionario con los parámetros de la función 'homomorphic_filter'. 
         Por defecto es None.
-    hilbert_bool : bool, optional
-        Booleano que indica si es que se agrega las envolventes obtenidas a 
-        partir de la transformada de Hilbert. Por defecto es False.
+    hilbert_dict : bool, optional
+        hilbert_dict : dict or None, optional
+        Diccionario con booleanos de inclusión de ciertas envolventes.
+        'analytic_env' es el booleano para agregar la envolvente 
+        analítica obtenida de la magntitud de la señal analítica.
+        'inst_phase' es el booleano para agregar la fase instantánea
+        obtenida como la fase de la señal analítica. 'inst_freq' es el
+        booleano para agregar la frecuencia instantánea obtenida como 
+        la derivada de la fase de la señal analítica. Por defecto es 
+        None. Si es None, no se incluye como envolvente.
     simplicity_dict : dict, optional
         Diccionario con los parámetros de la función 
         'simplicity_based_envelope'. Por defecto es None.
@@ -130,11 +139,13 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
         # Calculando las envolventes
         envelopes = get_envelope_pack(audio, samplerate, 
                                       homomorphic_dict=homomorphic_dict, 
-                                      hilbert_bool=hilbert_bool,
+                                      hilbert_dict=hilbert_dict,
                                       simplicity_dict=simplicity_dict, 
                                       vfd_dict=vfd_dict, 
                                       wavelet_dict=wavelet_dict, 
-                                      spec_track_dict=spec_track_dict)
+                                      spec_track_dict=spec_track_dict,
+                                      spec_energy_dict=spec_energy_dict, 
+                                      norm_type=norm_type)
         # Concatenando
         audio_info = np.concatenate((audio_info, envelopes), axis=1)
     
@@ -181,25 +192,31 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
                                     noverlap=noverlap, 
                                     padding_value=0)
     
-    # Sin embargo, es necesario resumir en una etiqueta por ventana
-    s1_wind = s1_matrix.sum(axis=1) >= activation_percentage * N
-    s2_wind = s2_matrix.sum(axis=1) >= activation_percentage * N
+    # Resumir a una sola etiqueta si es que se define esta variable
+    if activation_percentage is not None:
+        # Sin embargo, es necesario resumir en una etiqueta por ventana
+        s1_info = s1_matrix.sum(axis=1) >= activation_percentage * N
+        s2_info = s2_matrix.sum(axis=1) >= activation_percentage * N
+    else:
+        s1_info = s1_matrix
+        s2_info = s2_matrix
     
     # Finalmente, pasando a números (0 o 1)
-    s1_wind = s1_wind.astype(int)
-    s2_wind = s2_wind.astype(int)
+    s1_info = s1_info.astype(int)
+    s2_info = s2_info.astype(int)
     
-    return audio_info_matrix, s1_wind, s2_wind
+    return audio_info_matrix, s1_info, s2_info
 
 
-def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512, 
-                            noverlap=0, padding_value=2, activation_percentage=0.5, 
+def get_heartsound_database(db_folder, seed_base, index_list, N=512, noverlap=0, 
+                            padding_value=2, activation_percentage=None, 
                             append_audio=True, append_envelopes=False, 
                             apply_bpfilter=False, bp_parameters=None, 
                             apply_noise=False, snr_expected=0,
-                            homomorphic_dict=None, hilbert_bool=False,
+                            homomorphic_dict=None, hilbert_dict=None,
                             simplicity_dict=None, vfd_dict=None, 
                             wavelet_dict=None, spec_track_dict=None,
+                            spec_energy_dict=None, norm_type='minmax',
                             append_fft=False):
     '''Función que permite crear matrices de información y etiquetas en base a 
     los datos .wav y .mat de la carpeta db_folder para el problema de detección 
@@ -231,7 +248,10 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
     '''
     # Obtener los nombres de los archivos
     filenames = [f'{db_folder}/{name[:-4]}' for name in os.listdir(db_folder) 
-                 if name.endswith('.wav')][ind_beg:ind_end]
+                 if name.endswith('.wav')]
+    
+    # Filtrando por los índices
+    filenames = [name for i, name in enumerate(filenames) if i in index_list]
     
     # Definción de la dimensión de los datos
     q_dim = 0
@@ -241,20 +261,28 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
     
     if append_envelopes:
         q_dim = q_dim if homomorphic_dict is None else q_dim + 1
+        q_dim = q_dim if hilbert_dict is None else q_dim + sum(hilbert_dict.values())
         q_dim = q_dim if simplicity_dict is None else q_dim + 1
         q_dim = q_dim if vfd_dict is None else q_dim + 1
         q_dim = q_dim if wavelet_dict is None else q_dim + 1
         q_dim = q_dim if spec_track_dict is None \
                       else q_dim + len(spec_track_dict['freq_obj'])
-        q_dim = q_dim + 2 if hilbert_bool else q_dim
-        q_dim = q_dim + 1 if append_fft else q_dim
+        q_dim = q_dim if spec_energy_dict is None else q_dim + 1
+    
+    # Caso de las fft
+    q_dim = q_dim + 1 if append_fft else q_dim
+        
     
     # Definición de la matriz que concatenará la base de datos de audio
     audio_db = np.zeros((0, N, q_dim))
     
     # Definición de las matrices que concatenarán las etiquetas
-    s1_labels = np.zeros((0,1))
-    s2_labels = np.zeros((0,1))
+    if activation_percentage is not None:
+        s1_labels = np.zeros((0,1))
+        s2_labels = np.zeros((0,1))
+    else:
+        s1_labels = np.zeros((0, N, 1))
+        s2_labels = np.zeros((0, N, 1))
         
     for num, filename in enumerate(tqdm(filenames, desc='db', ncols=70)):
         # Obtención de los datos de interés para el archivo filename
@@ -270,11 +298,12 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
                                    append_audio=append_audio, 
                                    append_envelopes=append_envelopes, 
                                    homomorphic_dict=homomorphic_dict, 
-                                   hilbert_bool=hilbert_bool, 
+                                   hilbert_dict=hilbert_dict, 
                                    simplicity_dict=simplicity_dict, 
                                    vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
                                    spec_track_dict=spec_track_dict, 
-                                   append_fft=append_fft)
+                                   spec_energy_dict=spec_energy_dict, 
+                                   norm_type=norm_type, append_fft=append_fft)
         
         # Agregando la información a cada arreglo
         audio_db = np.concatenate((audio_db, audio_mat), axis=0)
@@ -284,14 +313,15 @@ def get_heartsound_database(db_folder, seed_base, ind_beg=0, ind_end=None, N=512
     return audio_db, s1_labels, s2_labels
 
 
-def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind_end=None, 
+def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind_end=None,
                    N=512, noverlap=0, padding_value=2, activation_percentage=0.5, 
                    append_audio=True, append_envelopes=False, apply_bpfilter=False, 
-                   bp_parameters=None, apply_noise=False, homomorphic_dict=None, 
-                   hilbert_bool=False,simplicity_dict=None, vfd_dict=None, 
-                   wavelet_dict=None, spec_track_dict=None, append_fft=False):
-    '''Función que permite generar la base de datos final que se usará
-    como entrada al modelo.
+                   bp_parameters=None, homomorphic_dict=None, hilbert_dict=None, 
+                   simplicity_dict=None, vfd_dict=None, wavelet_dict=None, 
+                   spec_track_dict=None, spec_energy_dict=None, norm_type='minmax', 
+                   append_fft=False, print_indexes=False, return_indexes=False):
+    '''Función que permite generar la base de datos final que se usará como entrada al 
+    modelo.
     
     Parameters
     ----------
@@ -315,131 +345,136 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
     s2_labels : ndarray
         Matriz que contiene todas las etiquetas S2 de todos los archivos 
         de audio de la base de datos escogida.
-    '''    
-    # En primer lugar se obtiene la base de datos original
-    audio_db, s1_labels, s2_labels = \
-        get_heartsound_database(db_folder, 0, ind_beg=ind_beg, 
-                                ind_end=ind_end, N=N, noverlap=noverlap, 
-                                padding_value=padding_value, 
-                                activation_percentage=activation_percentage, 
-                                append_audio=append_audio, 
-                                append_envelopes=append_envelopes, 
-                                apply_bpfilter=apply_bpfilter, 
-                                bp_parameters=bp_parameters, 
-                                apply_noise=False, snr_expected=0,
-                                homomorphic_dict=homomorphic_dict, 
-                                hilbert_bool=hilbert_bool,
-                                simplicity_dict=simplicity_dict, 
-                                vfd_dict=vfd_dict, 
-                                wavelet_dict=wavelet_dict, 
-                                spec_track_dict=spec_track_dict, 
-                                append_fft=append_fft)
-    
-    
-    # Definición de la semilla base
-    seed_base = 0
-        
-    # Para cada caso en las SNR definidas
-    for snr_desired in snr_list:
-        # Obteniendo la base de datos con ruido "snr_desired"
-        audio_db_to, s1_labels_to, s2_labels_to = \
-            get_heartsound_database(db_folder, seed_base, ind_beg=ind_beg, 
-                                    ind_end=ind_end, N=N, noverlap=noverlap, 
-                                    padding_value=padding_value, 
+    '''
+    def _get_data(index_list, seed_base):
+        '''Rutina auxiliar que obtiene los datos y sus respectivas etiquetas,
+        incluso con una etapa en la que se añade ruido a la señal.
+        '''
+        # En primer lugar se obtiene la base de datos original
+        audio_db, s1_labels, s2_labels = \
+            get_heartsound_database(db_folder, 0, index_list, N=N, 
+                                    noverlap=noverlap, padding_value=padding_value, 
                                     activation_percentage=activation_percentage, 
                                     append_audio=append_audio, 
                                     append_envelopes=append_envelopes, 
                                     apply_bpfilter=apply_bpfilter, 
                                     bp_parameters=bp_parameters, 
-                                    apply_noise=True, 
-                                    snr_expected=snr_desired,
+                                    apply_noise=False, snr_expected=0,
                                     homomorphic_dict=homomorphic_dict, 
-                                    hilbert_bool=hilbert_bool,
+                                    hilbert_dict=hilbert_dict,
                                     simplicity_dict=simplicity_dict, 
                                     vfd_dict=vfd_dict, 
                                     wavelet_dict=wavelet_dict, 
                                     spec_track_dict=spec_track_dict,
-                                    append_fft=append_fft)
+                                    spec_energy_dict=spec_energy_dict, 
+                                    norm_type=norm_type, append_fft=append_fft)
+
+        # Para cada caso en las SNR definidas
+        for snr_desired in snr_list:
+            # Obteniendo la base de datos con ruido "snr_desired"
+            audio_db_to, s1_labels_to, s2_labels_to = \
+                get_heartsound_database(db_folder, seed_base, index_list, N=N, 
+                                        noverlap=noverlap, padding_value=padding_value, 
+                                        activation_percentage=activation_percentage, 
+                                        append_audio=append_audio, 
+                                        append_envelopes=append_envelopes, 
+                                        apply_bpfilter=apply_bpfilter, 
+                                        bp_parameters=bp_parameters, 
+                                        apply_noise=True, 
+                                        snr_expected=snr_desired,
+                                        homomorphic_dict=homomorphic_dict, 
+                                        hilbert_dict=hilbert_dict,
+                                        simplicity_dict=simplicity_dict, 
+                                        vfd_dict=vfd_dict, 
+                                        wavelet_dict=wavelet_dict, 
+                                        spec_track_dict=spec_track_dict,
+                                        spec_energy_dict=spec_energy_dict, 
+                                        norm_type=norm_type, append_fft=append_fft)
+
+            # Aumentando la semilla base
+            seed_base += 10
+
+            # Y agregando a la base de datos
+            audio_db  = np.concatenate((audio_db , audio_db_to),  axis=0)
+            s1_labels = np.concatenate((s1_labels, s1_labels_to), axis=0)
+            s2_labels = np.concatenate((s2_labels, s2_labels_to), axis=0)
+
+        # Se concatenan las etiquetas para tener una sola variable "Y"
+        labels = np.concatenate((s1_labels, s2_labels), axis=-1)
         
-        # Aumentando la semilla base
-        seed_base += 10000
-        
-        # Y agregando a la base de datos
-        audio_db  = np.concatenate((audio_db , audio_db_to),  axis=0)
-        s1_labels = np.concatenate((s1_labels, s1_labels_to), axis=0)
-        s2_labels = np.concatenate((s2_labels, s2_labels_to), axis=0)
+        return audio_db, labels
     
-    # Se concatenan las etiquetas para tener una sola variable "Y"
-    labels = np.concatenate((s1_labels, s2_labels), axis=1)
     
-    # Y finalmente es separan en train y test
-    X_train, X_test, Y_train, Y_test = train_test_split(audio_db, labels, 
-                                                        test_size=test_size,
-                                                        random_state=seed_split)
+    # En caso en que se defina esta variable como None, se calcula la cantidad
+    # de archivos .wav en la carpeta de base de datos
+    if ind_end is None:
+        ind_end = len([i for i in os.listdir(db_folder) if i.endswith('.wav')])
+       
+    # Obtención de los indices de entrenamiento y testeo 
+    train_indexes, test_indexes = \
+        train_test_indexes(ind_beg=ind_beg, ind_end=ind_end, 
+                           test_size=test_size, random_state=seed_split)
     
-    return X_train, X_test, Y_train, Y_test
+    # Opción de imprimir los índices
+    if print_indexes:
+        print(f'Entrenamiento: {train_indexes}')
+        print(f'Testeo: {test_indexes}')
+    
+    # Obtener los datos de entrenamiento y testeo
+    print('Datos de entrenamiento')
+    X_train, Y_train = _get_data(train_indexes, np.random.randint(0, 10000))
+    print('Datos de testeo')
+    X_test,  Y_test  = _get_data(test_indexes, np.random.randint(0, 10000))
+    
+    # Se obtienen las bases y/o las índices de cada base de dato
+    if return_indexes:
+        return X_train, X_test, Y_train, Y_test, (train_indexes, test_indexes)
+    else:
+        return X_train, X_test, Y_train, Y_test
 
 
-def save_database(folder_to_save, db_folder, ind_beg=0, ind_end=None, N=512, noverlap=0, 
-                  padding_value=2, activation_percentage=0.5, append_audio=True, 
-                  append_envelopes=False, apply_bpfilter=False, bp_parameters=None, 
-                  homomorphic_dict=None, hilbert_bool=False, simplicity_dict=None, 
-                  vfd_dict=None, wavelet_dict=None, spec_track_dict=None):
-    '''Rutina que permite guardar la base de datos de sonidos cardiacos ventaneados
-    en un archivo .npz, en el cual se les puede especificar el uso de envolventes de los
-    sonidos de interés.
+def train_test_indexes(ind_beg, ind_end, test_size, random_state=0):
+    '''Función que permite obtener los índices de los audios que serán 
+    utilizados para obtener los sonidos de entrenamiento y testeo.
     
     Parameters
     ----------
-    folder_to_save : str
-        Dirección donde se almacenerá la base de datos generada
-    (**kwargs) : De la función get_heartsound_database.
+    ind_beg : int
+        Indice del primer archivo de audio a considerar.
+    ind_end : int
+        Indice del último archivo de audio a considerar.
+    test_size : float
+        Porcentaje de datos utilizados para el testeo (valor entre 0 
+        y 1).
+    random_state : int, optional
+        Semilla utilizada para generar los datos. Por defecto es 0.
+    
+    Returns
+    -------
+    train_indexes : list
+        Lista que contiene los índices de la base de datos que serán 
+        utilizadas para entrenamiento.
+    test_indexes : list
+        Lista que contiene los índices de la base de datos que serán 
+        utilizadas para testeo.
     '''
-    # Creación del nombre del archivo
-    filename = 'db_'
+    # Aplicación de la semilla para la separación de muestras
+    np.random.seed(random_state)
     
-    # Si se agrega el archivo de audio sin procesar
-    if append_audio:
-        filename += 'raw-'
+    # Definición de la cantidad de datos
+    N = abs(ind_end - ind_beg)
     
-    # Si se agregan envolventes, se ve para cada uno de los casos
-    if append_envelopes:
-        if homomorphic_dict is not None:
-            filename += 'hom-'
-        if hilbert_bool:
-            filename += 'hil-'
-        if simplicity_dict is not None:
-            filename += 'sbe-'
-        if vfd_dict is not None:
-            filename += 'vfd-'
-        if wavelet_dict is not None:
-            filename += 'mwp-'
-        if spec_track_dict is not None:
-            filename += 'spt-'
+    # Definición de los índices de datos de entrenamiento
+    train_indexes = np.random.choice(np.arange(ind_beg, ind_end), 
+                                     size=int(round(N * (1 - test_size))),
+                                     replace=False).tolist()
+    train_indexes.sort()
     
-    # Eliminar el último guión y agregar el formato
-    filename = filename.strip('-') + '.npz'
+    # Definición de los índices de datos de testeo
+    test_indexes = list(set([i for i in range(ind_beg, ind_end)]) - 
+                        set(train_indexes))
+    test_indexes.sort()
     
-    # Obtención de la base de datos de audio y etiquetas para S1-S2
-    audio_db, s1_labels, s2_labels = \
-        get_heartsound_database(db_folder, seed_base=0, ind_beg=ind_beg, ind_end=ind_end, N=N, 
-                                noverlap=noverlap, padding_value=padding_value, 
-                                activation_percentage=activation_percentage, 
-                                append_audio=append_audio, 
-                                append_envelopes=append_envelopes, 
-                                apply_bpfilter=apply_bpfilter, 
-                                bp_parameters=bp_parameters, 
-                                homomorphic_dict=homomorphic_dict, 
-                                hilbert_bool=hilbert_bool,
-                                simplicity_dict=simplicity_dict, 
-                                vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
-                                spec_track_dict=spec_track_dict)
-    
-    # Preguntar si es que la carpeta se ha creado. En caso de que no exista, 
-    # se crea una carpeta
-    if not os.path.isdir(folder_to_save):
-        os.makedirs(folder_to_save)
-    
-    # Finalmente, guardando los datos en un archivo .npz
-    np.savez(f'{folder_to_save}/{filename}', X=audio_db, Y_S1=s1_labels, 
-             Y_S2=s2_labels)
+    return train_indexes, test_indexes
+  
+

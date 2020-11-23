@@ -7,7 +7,7 @@ from heart_sound_DNN_models import model_2_1, model_2_2, model_2_3, model_2_4, \
     model_2_5, model_2_6, model_2_7, model_2_8, model_3, model_4_1, model_4_2, \
     model_4_3, model_4_4, model_5_1, model_5_1_1, model_5_2_1, model_5_2_2, \
     model_5_2_3, model_5_2_4, model_5_2_4_1, model_5_2_5, model_5_2_6, model_5_2_7, \
-    model_5_2_8
+    model_5_2_8, model_5_2_9
 from heart_sound_physionet_management import get_model_data
 
 
@@ -15,7 +15,7 @@ from heart_sound_physionet_management import get_model_data
 def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_test,
                     test_on_iter=True):
     # Definición de los datos de entrenamiento y testeo
-    X_train, X_test_to, Y_train, Y_test_to = \
+    X_train, X_test_to, Y_train, Y_test_to, (train_indexes, test_indexes) = \
         get_model_data(db_folder, test_size=test_size, seed_split=seed_split, 
                        snr_list=snr_list, ind_beg=ind_beg_iter, ind_end=ind_end_iter, N=N, 
                        noverlap=N-step, padding_value=padding_value, 
@@ -25,7 +25,8 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
                        homomorphic_dict=homomorphic_dict, hilbert_bool=hilbert_bool,
                        simplicity_dict=simplicity_dict, 
                        vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
-                       spec_track_dict=spec_track_dict, append_fft=append_fft)
+                       spec_track_dict=spec_track_dict, append_fft=append_fft,
+                       print_indexes=False, return_indexes=True)
 
     # Concatenando la información de test
     X_test = np.concatenate((X_test, X_test_to), axis=0)
@@ -46,7 +47,7 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
                                     return_dict=True)
     
     elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
-                        'Model_5_2_7', 'Model_5_2_8']:
+                        'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt']:
         print('\nTraining time\n------------\n')
         history = model.fit(x=[X_train[:, :, i] for i in range(X_train.shape[2])], 
                             y=[Y_train[:,0], Y_train[:,1]], epochs=epochs, 
@@ -75,6 +76,11 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
             file.write(f';{eval_info}\n')
         else:
             file.write('\n')
+            
+    with open(f'Models/{model_name}_db.txt', 'a', encoding='utf8') as file:
+        # Definición del diccionario a agregar
+        dict_to_append = {'train_indexes': train_indexes, 'test_indexes': test_indexes}
+        file.write(f'{dict_to_append}\n')
         
     return model, X_test, Y_test
 
@@ -107,7 +113,7 @@ ind_beg = 0
 ind_end = None
 big_batch_size = 50
 N = 128
-step = 16
+step = 8
 padding_value = 2
 
 apply_bpfilter = True
@@ -116,7 +122,7 @@ bp_parameters = [40, 60, 230, 250]
 append_envelopes = True
 homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
 hilbert_bool = True
-simplicity_dict = {'N': 64, 'noverlap': 32, 'm': 10, 'tau': 1}
+simplicity_dict = None # {'N': 64, 'noverlap': 32, 'm': 10, 'tau': 1}
 vfd_dict = {'N': 64, 'noverlap': 32, 'kmin': 2, 'kmax': 2, 'step_size_method': 'unit'}
 wavelet_dict = {'wavelet': 'db4', 'levels': [2,3,4], 'start_level': 1, 'end_level': 4}
 spec_track_dict = {'freq_obj': [100, 150], 'N': 128, 'noverlap': 100, 'padding': 0, 
@@ -128,12 +134,12 @@ append_fft = True
 validation_split = 0.1
 batch_size = 70 
 epochs = 10
-model_name = 'Model_5_2_8'
+model_name = 'Model_5_2_9_alt'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
-loss_func = 'binary_crossentropy'
-metrics = ['accuracy']
+loss_func = 'mse'
+metrics = ['accuracy', tf.keras.metrics.Recall(), tf.keras.metrics.Precision()]
 loss_weights = [1., 1.]
 
 
@@ -304,6 +310,10 @@ elif model_name == 'Model_5_2_7':
 elif model_name == 'Model_5_2_8':
     model = model_5_2_8(input_shape=(X_train.shape[1], X_train.shape[2]),
                         padding_value=padding_value, name=model_name)
+    
+elif 'Model_5_2_9' in model_name:
+    model = model_5_2_9(input_shape=(X_train.shape[1], X_train.shape[2]),
+                        padding_value=padding_value, name=model_name)
 
 # Compilando las opciones del modelo
 if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
@@ -311,7 +321,7 @@ if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_h
                   'Model_2_7_2', 'Model_2_8', 'Model_4_1', 'Model_4_2', 'Model_4_3', 'Model_4_4', 
                   'Model_5_1', 'Model_5_1_1', 'Model_5_2_1', 'Model_5_2_2', 'Model_5_2_3', 
                   'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6', 'Model_5_2_7',
-                  'Model_5_2_8']:
+                  'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt']:
     loss_model = [loss_func, loss_func]
 
 elif model_name in ['Model_3']:
@@ -343,8 +353,10 @@ if N_data % big_batch_size == 0:
 else:
     n_iter = N_data // big_batch_size + 1
 
+
 # Reseteando el archivo de historial
 open(f'Models/{model_name}.txt', 'w', encoding='utf8').close()
+open(f'Models/{model_name}_db.txt', 'w', encoding='utf8').close()
 
 
 # Definición de la información de test final
@@ -384,7 +396,7 @@ if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_h
                                return_dict=True)
 
 elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
-                    'Model_5_2_7', 'Model_5_2_8']:
+                    'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt']:
     print('\nTesting time\n------------\n')
     eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
                             y=[Y_test[:,0], Y_test[:,1]], verbose=1,

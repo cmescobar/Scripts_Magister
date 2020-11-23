@@ -473,6 +473,53 @@ def get_windowed_signal(signal_in, samplerate, N=512, noverlap=0,
     return np.array(signal_out)
 
 
+def get_inverse_windowed_signal(signal_in, N, noverlap):
+    '''Función que permite obtener la representación original de una 
+    señal a partir de una matriz de señal ventaneada.
+    
+    Parameters
+    ----------
+    signal_in : ndarray
+        Señal de entrada a transformar. Puede tener más de un canal (por 
+        ejemplo: audio, wavelets, shannon, etc.)
+    N : int, optional
+        Cantidad de puntos a utilizar por ventana. Por defecto es 512.
+    noverlap : int, optional
+        Cantidad de puntos de traslape que se utiliza para calcular la 
+        matriz. Por defecto es 0.
+        
+    Returns
+    -------
+    signal_out : ndarray
+        Reconstrucción a partir de una señal ventaneada.
+    '''
+    # A partir del overlap, el tamaño de cada ventana y la cantidad de frames 
+    # a las que se les ventanea, se define la cantidad de muestras que 
+    # representa la señal original
+    step = N - noverlap                               # Tamaño del paso
+    total_samples = step * (len(signal_in) - 1) + N   # Tamaño total del arreglo
+    
+    # Definición de una lista en la que se almacena la transformada inversa
+    inv_wind = np.zeros(total_samples, dtype=np.float)
+    
+    # Definición de una lista de suma de ventanas cuadráticas en el tiempo
+    sum_wind = np.zeros(total_samples, dtype=np.float)
+    
+    # Transformando punto a punto (nótese la división en tiempo por una 
+    # ventana definida)
+    for i, sample in enumerate(signal_in):
+        # Definición del punto inicial
+        beg = i * step
+        # Se agrega una ventana de "N" puntos con valor "sample"
+        inv_wind[beg:beg+N] += sample
+        
+        # Se agrega una ventana de "N" puntos con valor 1 que permitirá 
+        # corregir por los valores de traslape
+        sum_wind[beg:beg+N] += 1
+        
+    return np.divide(inv_wind, sum_wind)
+
+
 def get_noised_signal(signal_in, snr_expected, seed=None, plot_signals=False,
                       normalize=True):
     '''Función que permite agregar ruido blanco gaussiano a una señal de 

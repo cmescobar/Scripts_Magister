@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PyEMD import EMD, EEMD
 from scipy import signal, stats
-from descriptor_functions import get_spectrogram
+from descriptor_functions import get_spectrogram, get_inverse_windowed_signal
 from filter_and_sampling import lowpass_filter, highpass_filter
 
 
@@ -552,6 +552,52 @@ def modified_spectral_tracking(signal_in, samplerate, freq_obj=[150, 200], N=512
     return spectral_trackings
 
 
+def spectral_energy_bands(signal_in, samplerate, band_limits=[150, 200], alpha=2,
+                          N=512,  noverlap=256, padding=0, repeat=0, 
+                          window='hann'):
+    '''Función que permite realizar spectral tracking a través del tiempo para 
+    ciertas frecuencias.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+        Señal de entrada.
+    samplerate : int
+        Tasa de muestreo de la señal de entrada.
+    band_limits : list, optional
+        Límite de las bandas de frecuencia a analizar para el cálculo de la 
+        energía. Por defecto es [150,200]. 
+    alpha : float, optional
+        Exponente usado para el cálculo de la energía. Por defecto es 2.
+    **kwargs : Revisar parámetros de get_spectrogram.
+    
+    Returns
+    -------
+    spectral_energy : ndarray
+        Energía por ventanas en la banda de frecuencia especificada.
+    
+    References
+    ----------
+    [1] Schmidt, S. E., Holst-Hansen, C., Graff, C., Toft, E., & Struijk, J. J. 
+        (2010). Segmentation of heart sound recordings by a duration-dependent 
+        hidden Markov model. Physiological measurement, 31(4), 513.
+    '''
+    # Se obtiene el espectrograma
+    _, f, S = get_spectrogram(signal_in, samplerate, N=N, padding=padding, 
+                              repeat=repeat, noverlap=noverlap, window=window, 
+                              whole=False)
+    
+    # Se obtienen los índices de interés dentro de la banda de frecuencia
+    # especificada
+    band_indexes = np.where((f > band_limits[0]) & (f < band_limits[1]))[0]
+    
+    # Obtención de la energía espectral en la banda de interés
+    spectral_energy = abs(S[band_indexes]) ** alpha
+    
+    # Finalmente se suma para cada instante de tiempo
+    return spectral_energy.sum(axis=0)
+
+
 def get_spectral_info(signal_windowed, N=128, ind_audio=0, normalize=True):
     '''Función que permite obtener la fft sobre una señal ventaneada.
     
@@ -591,7 +637,7 @@ def get_spectral_info(signal_windowed, N=128, ind_audio=0, normalize=True):
     return np.expand_dims(fft_windowed[:,:N], -1)
 
 
-def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None, 
+def get_envelope_pack_OLD(signal_in, samplerate, homomorphic_dict=None, 
                       hilbert_bool=False, simplicity_dict=None, 
                       vfd_dict=None, wavelet_dict=None, 
                       spec_track_dict=None):
@@ -762,3 +808,259 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
 
     return envelope_out
 
+
+def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None, 
+                      hilbert_dict=None, simplicity_dict=None, 
+                      vfd_dict=None, wavelet_dict=None, 
+                      spec_track_dict=None, spec_energy_dict=None, 
+                      norm_type='minmax'):
+    '''Función que permite obtener un set de envolventes concatenadas 
+    en un arreglo en base a una señal de entrada. Es posible obtener 
+    envolventes a partir de filtros homomórficos, envolventes basados 
+    en la transformada de Hilbert, envolvente de simplicidad, envolvente 
+    de dimensión fractal, envolventes de wavelet multiescala o tracking 
+    espectrales.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+        Señal de entrada.
+    samplerate : float
+        Tasa de muestreo de la señal de entrada.
+    homomorphic_dict : dict or None
+        Diccionario con información sobre los parámetros de la función 
+        "homomorphic_filter". Por defecto es None. Si es None, no se 
+        incluye como envolvente.
+    homomorphic_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "homomorphic_filter". Por defecto es None. Si es None, no se 
+        incluye como envolvente.
+    hilbert_dict : dict or None, optional
+        Diccionario con booleanos de inclusión de ciertas envolventes.
+        'analytic_env' es el booleano para agregar la envolvente 
+        analítica obtenida de la magntitud de la señal analítica.
+        'inst_phase' es el booleano para agregar la fase instantánea
+        obtenida como la fase de la señal analítica. 'inst_freq' es el
+        booleano para agregar la frecuencia instantánea obtenida como 
+        la derivada de la fase de la señal analítica. Por defecto es 
+        None. Si es None, no se incluye como envolvente.
+    vfd_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "variance_fractal_dimension". Por defecto es None. Si es None, 
+        no se incluye como envolvente.
+    wavelet_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "stationary_multiscale_wavelets". Por defecto es None. Si es 
+        None, no se incluye como envolvente.
+    spec_track_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "spectral_energy_bands". Por defecto es None. Si es None, no 
+        se incluye como envolvente.
+    spec_energy_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "modified_spectral_tracking". Por defecto es None. Si es 
+        None, no se incluye como envolvente.
+    norm_type : {'minmax', 'mu-sigma'}, optional
+        Tipo de normalización a aplicar en la señal. 'minmax' normaliza
+        la señal entre 0 y 1. 'mu-sigma' normaliza la señal 
+        estadísticamente restando la media y dividiendo por la desviación
+        estándar. Por defecto es 'minmax'.
+    
+    Returns
+    -------
+    envelope_out : ndarray
+        Arreglo con las distintas envolventes.
+    '''
+    # Función auxiliar para calcular las normalizaciones entre 0 y 1
+    def _norm_01(x, resample=False):
+        if resample:
+            x = signal.resample(x, len(signal_in))
+        x = x - min(x)
+        return x / max(abs(x))
+    
+    # Función auxiliar para calcular las normalizaciones en base a
+    # la media y la desviación estándar
+    def _norm_mu_sigma(x, resample=False):
+        if resample:
+            x = signal.resample(x, len(signal_in))
+        x = x - np.mean(x)
+        return x / np.std(x)
+    
+    # Función auxiliar para definir la función de normalización
+    def _norm_func(option):
+        if option == 'minmax':
+            return _norm_01
+        elif option == 'mu-sigma':
+            return _norm_mu_sigma
+        else:
+            raise Exception('Error en la selección de normalización.')
+    
+    # Definición de la función de normalización
+    norm_func = _norm_func(norm_type)
+    
+    # Creación del vector de envolventes
+    envelope_out = np.zeros((len(signal_in), 0))
+    
+    ### Filtro homomórfico ###
+    if homomorphic_dict is not None:
+        hom_out = homomorphic_filter(signal_in, samplerate, 
+                                     cutoff_freq=homomorphic_dict['cutoff_freq'], 
+                                     delta_band=homomorphic_dict['delta_band'], 
+                                     filter_type='lowpass', epsilon=1e-10)
+        
+        # Normalizando
+        hom_out = norm_func(hom_out)
+        
+        # Concatenando
+        hom_out = np.expand_dims(hom_out, -1)
+        envelope_out = np.concatenate((envelope_out, hom_out), axis=1)
+    
+    
+    ### Transformada de Hilbert ###
+    if hilbert_dict is not None:
+        # Aplicando un threshold
+        abs_signal = np.where(abs(signal_in) < 0.1 * max(abs(signal_in)),
+                              0, abs(signal_in))
+
+        # Cálculo de la envolvente de energía de Shannon
+        shannon_hilb = shannon_envolve(abs_signal + 1e-10, alpha=2)
+
+        # Cálculo de las envovlentes de hilbert (frecuencia instantánea)
+        signal_hilb = homomorphic_filter(shannon_hilb, samplerate, 
+                                         cutoff_freq=10, delta_band=5)
+
+        # Se asegura que esté entre 0 y 1
+        signal_hilb = _norm_01(signal_hilb)
+
+        # Y se calcula su representación
+        analytic_env, inst_phase, inst_freq = hilbert_representation(signal_hilb, 
+                                                                     samplerate)
+        
+        if hilbert_dict['analytic_env']:
+            # Normalizando
+            analytic_env = norm_func(abs(analytic_env))
+            analytic_env = np.expand_dims(analytic_env, -1)
+            
+            # Concatenando
+            envelope_out = np.concatenate((envelope_out, analytic_env), axis=1)
+            
+        if hilbert_dict['inst_phase']:
+            # Normalizando
+            inst_phase = norm_func(inst_phase)
+            inst_phase = np.expand_dims(inst_phase, -1)
+            
+            # Concatenando
+            envelope_out = np.concatenate((envelope_out, inst_phase), axis=1)    
+        
+        
+        if hilbert_dict['inst_freq']:
+            # Normalizando
+            inst_freq = norm_func(inst_freq)
+            inst_freq = np.expand_dims(inst_freq, -1)
+            
+            # Concatenando
+            envelope_out = np.concatenate((envelope_out, inst_freq), axis=1)  
+    
+    
+    ### Simplicity based envelope ###
+    if simplicity_dict is not None:
+        simp_env = simplicity_based_envelope(signal_in, N=simplicity_dict['N'], 
+                                             noverlap=simplicity_dict['noverlap'], 
+                                             m=simplicity_dict['m'], 
+                                             tau=simplicity_dict['tau'])    
+        
+        # Normalizando
+        simp_env = norm_func(simp_env, resample=True)
+        
+        # Concatenando
+        simp_env = np.expand_dims(simp_env, -1)
+        envelope_out = np.concatenate((envelope_out, simp_env), axis=1)
+    
+        
+    ### Variance fractal dimension ###
+    if vfd_dict is not None:
+        vfd_env = variance_fractal_dimension(signal_in, samplerate, NT=vfd_dict['N'], 
+                                             noverlap=vfd_dict['noverlap'], 
+                                             kmin=vfd_dict['kmin'], kmax=vfd_dict['kmax'], 
+                                             step_size_method=vfd_dict['step_size_method'])
+        
+        # Normalizando
+        vfd_env = norm_func(vfd_env, resample=True)
+        
+        # Concatenando
+        vfd_env = np.expand_dims(vfd_env, -1)
+        envelope_out = np.concatenate((envelope_out, vfd_env), axis=1)
+    
+    
+    ### Stationary Multiscale Wavelets ###
+    if wavelet_dict is not None:
+        wav_mult, _ = \
+            stationary_multiscale_wavelets(signal_in, wavelet=wavelet_dict['wavelet'], 
+                                           levels=wavelet_dict['levels'], 
+                                           start_level=wavelet_dict['start_level'], 
+                                           end_level=wavelet_dict['end_level'])
+        
+        # Normalizando
+        wav_mult = norm_func(abs(wav_mult))
+        
+        # Concatenando
+        wav_mult = np.expand_dims(wav_mult, -1)
+        envelope_out = np.concatenate((envelope_out, wav_mult), axis=1)
+    
+        
+    ### Spectral tracking ###
+    if spec_track_dict is not None:
+        track_list = modified_spectral_tracking(signal_in, samplerate, 
+                                                freq_obj=spec_track_dict['freq_obj'], 
+                                                N=spec_track_dict['N'], 
+                                                noverlap=spec_track_dict['noverlap'], 
+                                                padding=spec_track_dict['padding'], 
+                                                repeat=spec_track_dict['repeat'], 
+                                                window=spec_track_dict['window'])
+        
+        # Normalizando y concatenando
+        for track in track_list:
+            # Resampleando
+            track_res = get_inverse_windowed_signal(track, N=spec_track_dict['N'], 
+                                                    noverlap=spec_track_dict['noverlap'])
+            
+            # Recortando para el ajuste con la señal
+            N_cut = spec_track_dict['N'] // 2
+            
+            # Normalización
+            track_norm = norm_func(track_res[N_cut:N_cut + len(signal_in)], 
+                                   resample=False)
+            
+            # Concatenando
+            track_norm = np.expand_dims(track_norm, -1)
+            envelope_out = np.concatenate((envelope_out, track_norm), axis=1)
+    
+    
+    ### Spectral Energy Bands ###
+    if spec_energy_dict is not None:
+        energy_env = spectral_energy_bands(signal_in, samplerate, 
+                                           band_limits=spec_energy_dict['band_limits'], 
+                                           alpha=spec_energy_dict['alpha'],
+                                           N=spec_energy_dict['N'],  
+                                           noverlap=spec_energy_dict['noverlap'], 
+                                           padding=spec_energy_dict['padding'],
+                                           repeat=spec_energy_dict['repeat'], 
+                                           window=spec_energy_dict['window'])
+        
+        # Resampleando
+        energy_env_res = \
+                    get_inverse_windowed_signal(energy_env, N=spec_energy_dict['N'], 
+                                                noverlap=spec_energy_dict['noverlap'])
+        
+        # Recortando para el ajuste con la señal
+        N_cut = spec_energy_dict['N'] // 2
+        
+        # Normalización
+        energy_env_norm = norm_func(energy_env_res[N_cut:N_cut + len(signal_in)], 
+                                    resample=False)
+        
+        # Concatenando
+        energy_env_norm = np.expand_dims(energy_env_norm, -1)
+        envelope_out = np.concatenate((envelope_out, energy_env_norm), axis=1)
+        
+    return envelope_out

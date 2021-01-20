@@ -1,11 +1,13 @@
-import os
+import os, sys
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.io import wavfile, loadmat
 from filter_and_sampling import bandpass_filter
 from envelope_functions import get_envelope_pack, get_spectral_info
 from sklearn.model_selection import train_test_split
 from descriptor_functions import get_windowed_signal, get_noised_signal
+from memory_utils import sizeof_fmt
 
 
 def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2, 
@@ -15,9 +17,9 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
                            snr_expected=0, seed_snr=None, 
                            homomorphic_dict=None, hilbert_dict=None, 
                            simplicity_dict=None, vfd_dict=None, 
-                           wavelet_dict=None, spec_track_dict=None,
-                           spec_energy_dict=None, norm_type='minmax',
-                           append_fft=False):
+                           multiscale_wavelet_dict=None, spec_track_dict=None,
+                           spec_energy_dict=None, wavelet_dict=None, 
+                           norm_type='minmax', append_fft=False):
     '''Función que, para un archivo especificado, permite obtener su 
     representación en matrices de delay y sus etiquetas.
     
@@ -79,12 +81,18 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
     vfd_dict : dict, optional
         Diccionario con los parámetros de la función 
         'variance_fractal_dimension'. Por defecto es None.
-    wavelet_dict : dict, optional
+    multiscale_wavelet_dict : dict, optional
         Diccionario con los parámetros de la función 
         'stationary_multiscale_wavelets'. Por defecto es None.
     spec_track_dict : dict, optional
         Diccionario con los parámetros de la función 
         'modified_spectral_tracking'. Por defecto es None.
+    spec_energy_dict : dict or None, optional
+        Diccionario con los parámetros de la función 
+        "modified_spectral_tracking". Por defecto es None.
+    wavelet_dict : dict, optional
+        Diccionario con los parámetros de la función 
+        'stationary_wavelets_decomposition'. Por defecto es None.
     append_fft : bool, optional
         Booleano que indica si se agregan la FFT unilateral de audio. Por 
         defecto es False.
@@ -142,9 +150,10 @@ def get_windows_and_labels(filename, N=512, noverlap=0, padding_value=2,
                                       hilbert_dict=hilbert_dict,
                                       simplicity_dict=simplicity_dict, 
                                       vfd_dict=vfd_dict, 
-                                      wavelet_dict=wavelet_dict, 
+                                      multiscale_wavelet_dict=multiscale_wavelet_dict,
                                       spec_track_dict=spec_track_dict,
                                       spec_energy_dict=spec_energy_dict, 
+                                      wavelet_dict=wavelet_dict, 
                                       norm_type=norm_type)
         # Concatenando
         audio_info = np.concatenate((audio_info, envelopes), axis=1)
@@ -215,9 +224,9 @@ def get_heartsound_database(db_folder, seed_base, index_list, N=512, noverlap=0,
                             apply_noise=False, snr_expected=0,
                             homomorphic_dict=None, hilbert_dict=None,
                             simplicity_dict=None, vfd_dict=None, 
-                            wavelet_dict=None, spec_track_dict=None,
-                            spec_energy_dict=None, norm_type='minmax',
-                            append_fft=False):
+                            multiscale_wavelet_dict=None, spec_track_dict=None,
+                            spec_energy_dict=None, wavelet_dict=None, 
+                            norm_type='minmax', append_fft=False):
     '''Función que permite crear matrices de información y etiquetas en base a 
     los datos .wav y .mat de la carpeta db_folder para el problema de detección 
     de sonidos cardiacos.
@@ -264,10 +273,11 @@ def get_heartsound_database(db_folder, seed_base, index_list, N=512, noverlap=0,
         q_dim = q_dim if hilbert_dict is None else q_dim + sum(hilbert_dict.values())
         q_dim = q_dim if simplicity_dict is None else q_dim + 1
         q_dim = q_dim if vfd_dict is None else q_dim + 1
-        q_dim = q_dim if wavelet_dict is None else q_dim + 1
+        q_dim = q_dim if multiscale_wavelet_dict is None else q_dim + 1
         q_dim = q_dim if spec_track_dict is None \
                       else q_dim + len(spec_track_dict['freq_obj'])
         q_dim = q_dim if spec_energy_dict is None else q_dim + 1
+        q_dim = q_dim if wavelet_dict is None else q_dim + len(wavelet_dict['levels'])
     
     # Caso de las fft
     q_dim = q_dim + 1 if append_fft else q_dim
@@ -300,16 +310,18 @@ def get_heartsound_database(db_folder, seed_base, index_list, N=512, noverlap=0,
                                    homomorphic_dict=homomorphic_dict, 
                                    hilbert_dict=hilbert_dict, 
                                    simplicity_dict=simplicity_dict, 
-                                   vfd_dict=vfd_dict, wavelet_dict=wavelet_dict, 
+                                   vfd_dict=vfd_dict, 
+                                   multiscale_wavelet_dict=multiscale_wavelet_dict,
                                    spec_track_dict=spec_track_dict, 
                                    spec_energy_dict=spec_energy_dict, 
+                                   wavelet_dict=wavelet_dict, 
                                    norm_type=norm_type, append_fft=append_fft)
         
         # Agregando la información a cada arreglo
         audio_db = np.concatenate((audio_db, audio_mat), axis=0)
         s1_labels = np.concatenate((s1_labels, s1_lab), axis=0)
         s2_labels = np.concatenate((s2_labels, s2_lab), axis=0)
-        
+    
     return audio_db, s1_labels, s2_labels
 
 
@@ -317,9 +329,10 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
                    N=512, noverlap=0, padding_value=2, activation_percentage=0.5, 
                    append_audio=True, append_envelopes=False, apply_bpfilter=False, 
                    bp_parameters=None, homomorphic_dict=None, hilbert_dict=None, 
-                   simplicity_dict=None, vfd_dict=None, wavelet_dict=None, 
+                   simplicity_dict=None, vfd_dict=None, multiscale_wavelet_dict=None, 
                    spec_track_dict=None, spec_energy_dict=None, norm_type='minmax', 
-                   append_fft=False, print_indexes=False, return_indexes=False):
+                   wavelet_dict=None, append_fft=False, print_indexes=False, 
+                   return_indexes=False):
     '''Función que permite generar la base de datos final que se usará como entrada al 
     modelo.
     
@@ -433,6 +446,117 @@ def get_model_data(db_folder, test_size, seed_split, snr_list=[], ind_beg=0, ind
         return X_train, X_test, Y_train, Y_test
 
 
+def get_model_data_idxs(db_folder, snr_list=[], index_list=[], N=512, noverlap=0, 
+                        padding_value=2, activation_percentage=0.5, 
+                        append_audio=True, append_envelopes=False, apply_bpfilter=False, 
+                        bp_parameters=None, homomorphic_dict=None, hilbert_dict=None, 
+                        simplicity_dict=None, vfd_dict=None, multiscale_wavelet_dict=None, 
+                        spec_track_dict=None, spec_energy_dict=None, wavelet_dict=None, 
+                        norm_type='minmax', append_fft=False, print_indexes=False, 
+                        return_indexes=False):
+    '''Función que permite generar la base de datos final que se usará como entrada al 
+    modelo. A diferencia de la función original, en esta se permite el ingreso de los
+    índices de los archivos a considerar.
+    
+    Parameters
+    ----------
+    db_folder : str
+        Dirección de la carpeta a procesar.
+    test_size : float
+        Porcentaje de los datos que se van a utilizar para el testing.
+    snr_list : list, optional
+        Lista de snr's a considerar para la generación de sonidos. Por defecto es
+        una lista vacía.
+    (**kwargs) : De la función get_heartsound_database.
+        
+    Returns
+    -------
+    audio_db : ndarray
+        Matriz que contiene todas las ventanas de largo N de todos los archivos 
+        de audio de la base de datos escogida.
+    s1_labels : ndarray
+        Matriz que contiene todas las etiquetas S1 de todos los archivos 
+        de audio de la base de datos escogida.
+    s2_labels : ndarray
+        Matriz que contiene todas las etiquetas S2 de todos los archivos 
+        de audio de la base de datos escogida.
+    '''
+    def _get_data(index_list, seed_base):
+        '''Rutina auxiliar que obtiene los datos y sus respectivas etiquetas,
+        incluso con una etapa en la que se añade ruido a la señal.
+        '''
+        # En primer lugar se obtiene la base de datos original
+        audio_db, s1_labels, s2_labels = \
+            get_heartsound_database(db_folder, 0, index_list, N=N, 
+                                    noverlap=noverlap, padding_value=padding_value, 
+                                    activation_percentage=activation_percentage, 
+                                    append_audio=append_audio, 
+                                    append_envelopes=append_envelopes, 
+                                    apply_bpfilter=apply_bpfilter, 
+                                    bp_parameters=bp_parameters, 
+                                    apply_noise=False, snr_expected=0,
+                                    homomorphic_dict=homomorphic_dict, 
+                                    hilbert_dict=hilbert_dict,
+                                    simplicity_dict=simplicity_dict, 
+                                    vfd_dict=vfd_dict, 
+                                    multiscale_wavelet_dict=multiscale_wavelet_dict, 
+                                    spec_track_dict=spec_track_dict,
+                                    spec_energy_dict=spec_energy_dict, 
+                                    wavelet_dict=wavelet_dict, 
+                                    norm_type=norm_type, append_fft=append_fft)
+
+        # Para cada caso en las SNR definidas
+        for snr_desired in snr_list:
+            # Obteniendo la base de datos con ruido "snr_desired"
+            audio_db_to, s1_labels_to, s2_labels_to = \
+                get_heartsound_database(db_folder, seed_base, index_list, N=N, 
+                                        noverlap=noverlap, padding_value=padding_value, 
+                                        activation_percentage=activation_percentage, 
+                                        append_audio=append_audio, 
+                                        append_envelopes=append_envelopes, 
+                                        apply_bpfilter=apply_bpfilter, 
+                                        bp_parameters=bp_parameters, 
+                                        apply_noise=True, 
+                                        snr_expected=snr_desired,
+                                        homomorphic_dict=homomorphic_dict, 
+                                        hilbert_dict=hilbert_dict,
+                                        simplicity_dict=simplicity_dict, 
+                                        vfd_dict=vfd_dict, 
+                                        multiscale_wavelet_dict=multiscale_wavelet_dict, 
+                                        spec_track_dict=spec_track_dict,
+                                        spec_energy_dict=spec_energy_dict,
+                                        wavelet_dict=wavelet_dict,  
+                                        norm_type=norm_type, append_fft=append_fft)
+
+            # Aumentando la semilla base
+            seed_base += 10
+
+            # Y agregando a la base de datos
+            audio_db  = np.concatenate((audio_db , audio_db_to),  axis=0)
+            s1_labels = np.concatenate((s1_labels, s1_labels_to), axis=0)
+            s2_labels = np.concatenate((s2_labels, s2_labels_to), axis=0)
+
+        # Se concatenan las etiquetas para tener una sola variable "Y"
+        labels = np.concatenate((s1_labels, s2_labels), axis=-1)
+        
+        return audio_db, labels
+    
+        
+    # Obtener los datos de entrenamiento y testeo
+    X, Y = _get_data(index_list, np.random.randint(0, 10000))
+    
+    with open(f'Models/Last_model_reg.txt', 'a', encoding='utf8') as file:
+        for name, size in sorted(((name, sys.getsizeof(value)) 
+                                for name, value in locals().items() ), 
+                                key= lambda x: -x[1])[:10]:
+            text_to_disp = "{:>30}: {:>8}".format(name, sizeof_fmt(size))
+            print(text_to_disp)
+            file.write(f'{text_to_disp}\n')
+        file.write('\n\n')
+        
+    return X, Y
+
+
 def train_test_indexes(ind_beg, ind_end, test_size, random_state=0):
     '''Función que permite obtener los índices de los audios que serán 
     utilizados para obtener los sonidos de entrenamiento y testeo.
@@ -478,3 +602,112 @@ def train_test_indexes(ind_beg, ind_end, test_size, random_state=0):
     return train_indexes, test_indexes
   
 
+# Módulo de testeo
+if __name__ == '__main__':
+    # Definición del testeo a realizar
+    test_name = 'get_model_data_idxs'
+    
+    # Definición de la carpeta donde se almacena la base de datos
+    db_folder = 'PhysioNet 2016 CINC Heart Sound Database'
+    
+    lista_random = np.random.choice(100, size=1, replace=False)
+    print(lista_random)
+    
+    
+    if test_name == 'get_model_data_idxs':
+        # Parámetros
+        N_env = 128
+        step_env = 16
+        file_to_index = 122
+        
+        bp_parameters = [20, 30, 180, 200]
+        append_envelopes = True
+        homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+        hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 'inst_phase': False, 
+                        'inst_freq': False}
+        simplicity_dict =  None # {'N': 64, 'noverlap': 32, 'm': 10, 'tau': 1}
+        vfd_dict = {'N': N_env, 'noverlap': N_env - step_env, 'kmin': 4, 'kmax': 4, 
+                    'step_size_method': 'unit', 'inverse': True}
+        multiscale_wavelet_dict = {'wavelet': 'db4', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+        spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env, 'noverlap': N_env - step_env, 
+                            'padding': 0, 'repeat': 0, 'window': 'hann'}
+        spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env, 
+                            'noverlap': N_env - step_env, 'padding': 0, 'repeat': 0 , 
+                            'window': 'hann'}
+        # spec_energy_dict = None
+        wavelet_dict = {'wavelet': 'db4', 'levels': [4], 'start_level': 0, 'end_level': 4}
+                
+        envelopes, labels = \
+            get_model_data_idxs(db_folder, snr_list=[], index_list=[file_to_index],
+                                N=3500, noverlap=0, padding_value=2, activation_percentage=None, 
+                                append_audio=True, append_envelopes=append_envelopes, apply_bpfilter=True, 
+                                bp_parameters=bp_parameters, homomorphic_dict=homomorphic_dict, 
+                                hilbert_dict=hilbert_dict, simplicity_dict=simplicity_dict, 
+                                vfd_dict=vfd_dict, multiscale_wavelet_dict=multiscale_wavelet_dict, 
+                                spec_track_dict=spec_track_dict, spec_energy_dict=spec_energy_dict, 
+                                wavelet_dict=wavelet_dict, norm_type='minmax', 
+                                append_fft=False, print_indexes=False, return_indexes=False)
+        # Solo este segmento
+        envelopes = envelopes[0]
+        print(envelopes.shape)
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,1], label='Filtro homomórfico')
+        plt.title(r'Filtro homomórfico con $f_c = 10 Hz$ y $\Delta f = 5$ Hz')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,2], label=r'$A(t)$')
+        plt.title(r'Magnitud de la transformada de Hilbert')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,3], label=r'$A(t)$')
+        plt.title(r'Magnitud de la transformada de Hilbert modificada')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,4], label='VFD')
+        plt.title(r'Variance Fractal Dimension')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,5], label='MWP')
+        plt.title(r'Multiscale Wavelet Product de niveles de detalle 3 y 4, con Wavelet db4')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], color='c', label='Señal original')
+        plt.plot(envelopes[:,6], label=f'f = {spec_track_dict["freq_obj"][0]} Hz')
+        plt.plot(envelopes[:,7], label=f'f = {spec_track_dict["freq_obj"][1]} Hz')
+        plt.title(r'Envolventes de spectral tracking')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], label='Señal original')
+        plt.plot(envelopes[:,8], label='Energía por bandas')
+        plt.title(r'Envolvente de energía por bandas $f \in [40, 200] Hz$')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+                
+        plt.figure(figsize=(9,4))
+        plt.plot(envelopes[:,0], color='c', label='Señal original')
+        plt.plot(envelopes[:,9], label=f'f = Nivel {wavelet_dict["levels"][0]}')
+        # plt.plot(envelopes[:,8], label=f'f = Nivel {wavelet_dict["levels"][1]}')
+        plt.title(r'Envolventes de Wavelet')
+        plt.xlabel('Tiempo [ms]')
+        plt.legend(loc='lower right')
+        plt.show() 
+        
+    

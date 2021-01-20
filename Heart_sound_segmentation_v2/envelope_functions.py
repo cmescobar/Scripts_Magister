@@ -303,7 +303,7 @@ def variance_fractal_dimension(signal_in, samplerate, NT=1024, noverlap=512,
     '''Variance fractal dimension está dada por la expresión:
     D_o = D_E + 1 - H
 
-    Donde D_E corresponde a la dimensión del problema a resolver (por
+    Donde D_E corresponde a la dimensión de la señal a revisar (por
     ejemplo, en el caso de una curva D_E = 1, para un plano D_E = 2 y 
     para el espacio D_E = 3) y donde:
         H = lim_{dt -> 0} 1/2 * log(var(ds)) / log(dt)
@@ -384,19 +384,25 @@ def variance_fractal_dimension(signal_in, samplerate, NT=1024, noverlap=512,
         for k in range(kmin, kmax + 1):
             # Definición de la cantidad de ventanas nk
             nk = step_f(k)
-
-            # Definición de la cantidad del tamaño de las sub-ventanas
-            Nk = int(NT/nk)
-
+            
+            # Definición de la cantidad del tamaño de las sub-ventanas. Se
+            # reemplaza NT por q_samples ya que es lo mismo y permite considerar
+            # los últimos segmentos de audio
+            Nk = int(q_samples / nk)
+            
+            # Definición de los j * n_k 
+            j_nk_arrays = np.array([[j * nk, (j - 1) * nk] 
+                                    for j in range(1, Nk)]).T
+            
             # Calculo del delta_x
-            delta_x = signal_frame[1::nk] - signal_frame[:-1:nk]
+            delta_x = signal_frame[j_nk_arrays[0]] - signal_frame[j_nk_arrays[1]]
 
             # Calculo de var_dx
-            var_dx_k = 1/(Nk - 1) * (sum(delta_x ** 2) - 
-                                     1/Nk * (sum(delta_x)) ** 2)
+            var_dx_k = 1 / (Nk - 1) * (sum(delta_x ** 2) - 
+                                       1 / Nk * (sum(delta_x)) ** 2)
 
             # Definición de delta_t
-            delta_t = nk / samplerate
+            delta_t = nk # / samplerate
 
             # Agregando a las listas
             xaxis = np.concatenate((xaxis, [np.log(delta_t)]))
@@ -485,7 +491,7 @@ def stationary_multiscale_wavelets(signal_in, wavelet='db4', levels=[2,3,4],
     for level in levels:
         # Se utilizan estos índices debido a cómo se ordena la 
         # salida de la función pywt.swt(.)
-        wav_mult *= coeffs[-level + start_level - 1][1]
+        wav_mult *= coeffs[-level + start_level][1]
     
     # Eliminar puntos de padding
     if erase_pad:
@@ -503,6 +509,82 @@ def stationary_multiscale_wavelets(signal_in, wavelet='db4', levels=[2,3,4],
         coeffs_out = coeffs
     
     return wav_mult_out, coeffs_out
+
+
+def stationary_wavelets_decomposition(signal_in, wavelet='db4', levels=[2,3,4],
+                                      start_level=1, end_level=6, erase_pad=True):
+    '''Función que permite obtener las distintas escalas de una descomposición 
+    en Wavelets estacionarias. La SWT (o Stationary Wavelet Decomposition) 
+    corresponde a la clásica DWT (Discrete Wavelets descomposition), 
+    pero sin el paso utilizado para decimar la señal. Por lo tanto, las señales 
+    mantienen su largo a través de las escalas.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+        Señal de entrada a analizar mediante multiscale SWT.
+    wavelet : {pywt.families(kind='discrete')} type, optional
+        Wavelet utilizado para el proceso de dwt. Revisar en la 
+        documentación de pywt. Por defecto es "db4".
+    levels : ndarray or list
+        Niveles de la descomposición a obtener. Asegurarse de que  
+        estén entre "start_level" y "end_level". Por defecto es [2,3,4].
+    start_level : int, optional
+        Nivel en el que comienza la descomposición. Por defecto es 1.
+    end_level : int, optional
+        Nivel en el que termina la descomposición. Por defecto es 6.
+    erase_pad : bool, optional
+        Booleano que indica si es que se elimina el pad utilizado para 
+        calcular el SWT. Por defecto es True. 
+    
+    Returns
+    -------
+    wav_coeffs : ndarray
+        Coeficientes de detalle, obtenidas a partir de la descomposición SWT.
+    
+    References
+    ----------
+    [1] Springer, D. B., Tarassenko, L., & Clifford, G. D. (2015). 
+        Logistic regression-HSMM-based heart sound segmentation. 
+        IEEE Transactions on Biomedical Engineering, 63(4), 822-832.
+    '''
+    # Definición de la cantidad de puntos de la señal
+    N = signal_in.shape[0]
+    
+    # Cantidad de puntos deseados
+    points_desired = 2 ** int(np.ceil(np.log2(N)))
+    
+    # Definición de la cantidad de puntos de padding
+    pad_points = (points_desired-N) // 2
+    
+    # Paddeando para lograr el largo potencia de 2 que se necesita
+    audio_pad = np.pad(signal_in, pad_width=pad_points, 
+                       constant_values=0)
+    
+    # Descomposición en Wavelets estacionarias
+    coeffs = pywt.swt(audio_pad, wavelet=wavelet, level=end_level, 
+                      start_level=start_level)
+    
+    # Definición del arreglo donde se almacenarán los distintos niveles 
+    # de descomposición
+    wav_coeffs = np.zeros((len(coeffs[0][1]), 0))
+    
+    # Realizando la multiplicación entre los distintos niveles
+    for level in levels:
+        # Se utilizan estos índices debido a cómo se ordena la 
+        # salida de la función pywt.swt(.)
+        coef_i =  np.expand_dims(coeffs[-level + start_level][1], -1)
+        
+        # Concatenando los coeficientes
+        wav_coeffs = np.concatenate((wav_coeffs, coef_i), axis=1)
+        
+    # Eliminar puntos de padding
+    if erase_pad:
+        wav_coeffs_out = wav_coeffs[pad_points:-pad_points]
+    else:
+        wav_coeffs_out = wav_coeffs
+    
+    return wav_coeffs_out
 
 
 def modified_spectral_tracking(signal_in, samplerate, freq_obj=[150, 200], N=512, 
@@ -811,9 +893,9 @@ def get_envelope_pack_OLD(signal_in, samplerate, homomorphic_dict=None,
 
 def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None, 
                       hilbert_dict=None, simplicity_dict=None, 
-                      vfd_dict=None, wavelet_dict=None, 
+                      vfd_dict=None, multiscale_wavelet_dict=None, 
                       spec_track_dict=None, spec_energy_dict=None, 
-                      norm_type='minmax'):
+                      wavelet_dict=None, norm_type='minmax'):
     '''Función que permite obtener un set de envolventes concatenadas 
     en un arreglo en base a una señal de entrada. Es posible obtener 
     envolventes a partir de filtros homomórficos, envolventes basados 
@@ -848,7 +930,7 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
         Diccionario con información sobre los parámetros de la función 
         "variance_fractal_dimension". Por defecto es None. Si es None, 
         no se incluye como envolvente.
-    wavelet_dict : dict or None, optional
+    multiscale_wavelet_dict : dict or None, optional
         Diccionario con información sobre los parámetros de la función 
         "stationary_multiscale_wavelets". Por defecto es None. Si es 
         None, no se incluye como envolvente.
@@ -859,6 +941,10 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
     spec_energy_dict : dict or None, optional
         Diccionario con información sobre los parámetros de la función 
         "modified_spectral_tracking". Por defecto es None. Si es 
+        None, no se incluye como envolvente.
+    wavelet_dict : dict or None, optional
+        Diccionario con información sobre los parámetros de la función 
+        "stationary_wavelet_decomposition". Por defecto es None. Si es 
         None, no se incluye como envolvente.
     norm_type : {'minmax', 'mu-sigma'}, optional
         Tipo de normalización a aplicar en la señal. 'minmax' normaliza
@@ -918,6 +1004,7 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
     
     ### Transformada de Hilbert ###
     if hilbert_dict is not None:
+        ### Pasos para transformada de Hilbert Modificada ###
         # Aplicando un threshold
         abs_signal = np.where(abs(signal_in) < 0.1 * max(abs(signal_in)),
                               0, abs(signal_in))
@@ -933,16 +1020,27 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
         signal_hilb = _norm_01(signal_hilb)
 
         # Y se calcula su representación
-        analytic_env, inst_phase, inst_freq = hilbert_representation(signal_hilb, 
-                                                                     samplerate)
+        analytic_env_mod, inst_phase, inst_freq = \
+                            hilbert_representation(signal_hilb, samplerate)
         
         if hilbert_dict['analytic_env']:
+            # Obtener la envolvente analítica básica
+            analytic_env, _, _ = hilbert_representation(signal_in, samplerate)
+            
             # Normalizando
             analytic_env = norm_func(abs(analytic_env))
             analytic_env = np.expand_dims(analytic_env, -1)
             
             # Concatenando
             envelope_out = np.concatenate((envelope_out, analytic_env), axis=1)
+        
+        if hilbert_dict['analytic_env_mod']:
+            # Normalizando
+            analytic_env_mod = norm_func(abs(analytic_env_mod))
+            analytic_env_mod = np.expand_dims(analytic_env_mod, -1)
+            
+            # Concatenando
+            envelope_out = np.concatenate((envelope_out, analytic_env_mod), axis=1)
             
         if hilbert_dict['inst_phase']:
             # Normalizando
@@ -984,21 +1082,33 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
                                              kmin=vfd_dict['kmin'], kmax=vfd_dict['kmax'], 
                                              step_size_method=vfd_dict['step_size_method'])
         
-        # Normalizando
-        vfd_env = norm_func(vfd_env, resample=True)
+        
+        # Resampleando
+        vfd_env_res = get_inverse_windowed_signal(vfd_env, N=vfd_dict['N'], 
+                                                  noverlap=vfd_dict['noverlap'])
+        
+        # Recortando para el ajuste con la señal
+        N_cut = vfd_dict['N'] // 2
+        
+        # Normalización
+        vfd_env_norm = norm_func(vfd_env_res[:len(signal_in)], resample=False)
+        
+        # Hacerlo inverso
+        if vfd_dict['inverse']:
+            vfd_env_norm = 1 - vfd_env_norm
         
         # Concatenando
-        vfd_env = np.expand_dims(vfd_env, -1)
-        envelope_out = np.concatenate((envelope_out, vfd_env), axis=1)
+        vfd_env_norm = np.expand_dims(vfd_env_norm, -1)
+        envelope_out = np.concatenate((envelope_out, vfd_env_norm), axis=1)
     
     
     ### Stationary Multiscale Wavelets ###
-    if wavelet_dict is not None:
+    if multiscale_wavelet_dict is not None:
         wav_mult, _ = \
-            stationary_multiscale_wavelets(signal_in, wavelet=wavelet_dict['wavelet'], 
-                                           levels=wavelet_dict['levels'], 
-                                           start_level=wavelet_dict['start_level'], 
-                                           end_level=wavelet_dict['end_level'])
+            stationary_multiscale_wavelets(signal_in, wavelet=multiscale_wavelet_dict['wavelet'], 
+                                           levels=multiscale_wavelet_dict['levels'], 
+                                           start_level=multiscale_wavelet_dict['start_level'], 
+                                           end_level=multiscale_wavelet_dict['end_level'])
         
         # Normalizando
         wav_mult = norm_func(abs(wav_mult))
@@ -1062,5 +1172,24 @@ def get_envelope_pack(signal_in, samplerate, homomorphic_dict=None,
         # Concatenando
         energy_env_norm = np.expand_dims(energy_env_norm, -1)
         envelope_out = np.concatenate((envelope_out, energy_env_norm), axis=1)
-        
+    
+    
+    ### Wavelet decomposition ###
+    if wavelet_dict is not None:
+        wav_coeffs = \
+            stationary_wavelets_decomposition(signal_in, wavelet=wavelet_dict['wavelet'], 
+                                              levels=wavelet_dict['levels'],
+                                              start_level=wavelet_dict['start_level'], 
+                                              end_level=wavelet_dict['end_level'], 
+                                              erase_pad=True)
+
+        # Normalizando y concatenando
+        for i in range(wav_coeffs.shape[1]):
+            # Normalización
+            wavelet_norm = norm_func(abs(wav_coeffs[:,i]), resample=False)
+
+            # Concatenando
+            wavelet_norm = np.expand_dims(wavelet_norm, -1)
+            envelope_out = np.concatenate((envelope_out, wavelet_norm), axis=1)  
+    
     return envelope_out

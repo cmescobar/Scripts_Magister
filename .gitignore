@@ -43,6 +43,10 @@ Source separation tests/db_dict
 # Archivos usados en Heart_sound_segmentation_v2
 Heart_sound_segmentation_v2/PhysioNet 2016 CINC Heart Sound Database
 Heart_sound_segmentation_v2/HS_ultimate_test
+Heart_sound_segmentation_v2/Paper_models
+Heart_sound_segmentation_v2/Models
+Heart_sound_segmentation_v2/Trained_models
+Heart_sound_segmentation_v2/Analysis_results
 
 OLD/Components 2020-08-05/
 OLD/Components 2020-08-10/

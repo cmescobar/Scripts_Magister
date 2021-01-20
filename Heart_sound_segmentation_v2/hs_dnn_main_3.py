@@ -7,7 +7,8 @@ from heart_sound_DNN_models import model_2_1, model_2_2, model_2_3, model_2_4, \
     model_2_5, model_2_6, model_2_7, model_2_8, model_3, model_4_1, model_4_2, \
     model_4_3, model_4_4, model_5_1, model_5_1_1, model_5_2_1, model_5_2_2, \
     model_5_2_3, model_5_2_4, model_5_2_4_1, model_5_2_5, model_5_2_6, model_5_2_7, \
-    model_5_2_8, model_5_2_9, model_6_1
+    model_5_2_8, model_5_2_9, model_6_1, model_6_2, model_6_3, model_2_9, model_6_4, \
+    model_5_2_4_2, model_5_2_4_3
 from heart_sound_physionet_management import get_model_data
 
 
@@ -48,7 +49,7 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
     
     elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
                         'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt', 
-                        'Model_5_2_9_alt_2']:
+                        'Model_5_2_9_alt_2', 'Model_5_2_4_again']:
         print('\nTraining time\n------------\n')
         history = model.fit(x=[X_train[:, :, i] for i in range(X_train.shape[2])], 
                             y=[Y_train[:,0], Y_train[:,1]], epochs=epochs, 
@@ -70,7 +71,9 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
             eval_info = model.evaluate(x=X_test, y=Y_test[:,0] + Y_test[:,1], verbose=1,
                                     return_dict=True)
             
-    elif model_name in ['Model_6_1', 'Model_6_1_noised']:
+    elif model_name in ['Model_6_1', 'Model_6_1_noised', 'Model_6_1_onechannel', 
+                        'Model_6_2', 'Model_6_3', 'Model_6_4_onechannel', 
+                        'Model_6_4_typicalchannels']:
         print('\nTraining time\n------------\n')
         # Definición de las etiquetas de entrenamiento
         y1 = Y_train[:, :, 0]
@@ -108,6 +111,89 @@ def model_iteration(model, model_name, ind_beg_iter, ind_end_iter, X_test, Y_tes
             eval_info = model.evaluate(x=X_test, y=y_to, verbose=1,
                                        return_dict=True)
 
+    # No seguro de que esté bien
+    elif model_name in ['Model_2_9']:
+        print('\nTraining time\n------------\n')
+        # Definición de las etiquetas de entrenamiento
+        y1 = Y_train[:, 0]
+        y2 = Y_train[:, 1]
+        y0 = np.ones(Y_train.shape[:-1]) - y1 - y2
+
+        # Acondicionando las etiquetas para entrenar el modelo
+        y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+        y1 = np.expand_dims(y1, -1)     # S1
+        y2 = np.expand_dims(y2, -1)     # S2
+
+        # Concatenando las etiquetas para el modelo
+        y_to = np.concatenate((y0, y1, y2), axis=-1)
+        
+        # Entrenando
+        history = model.fit(x=X_train, y=y_to, epochs=epochs, batch_size=batch_size, 
+                            verbose=1, validation_split=validation_split)
+
+        if test_on_iter:
+            print('\nTesting time\n------------\n')
+            # Definición de las etiquetas de testeo
+            y1 = Y_test[:, 0]
+            y2 = Y_test[:, 1]
+            y0 = np.ones(Y_test.shape[:-1]) - y1 - y2
+
+            # Acondicionando las etiquetas para testear el modelo
+            y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+            y1 = np.expand_dims(y1, -1)     # S1
+            y2 = np.expand_dims(y2, -1)     # S2
+
+            # Concatenando las etiquetas para el modelo
+            y_to = np.concatenate((y0, y1, y2), axis=-1)
+            
+            # Evaluando
+            eval_info = model.evaluate(x=X_test, y=y_to, verbose=1,
+                                       return_dict=True)
+    
+    
+    elif model_name in ['Model_5_2_4_2', 'Model_5_2_4_3']:
+        print('\nTraining time\n------------\n')
+        # Definición de las etiquetas de testeo
+        y1 = Y_train[:, 0]
+        y2 = Y_train[:, 1]
+        y0 = np.ones(Y_train.shape[0]) - y1 - y2
+
+        # Acondicionando las etiquetas para testear el modelo
+        y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+        y1 = np.expand_dims(y1, -1)     # S1
+        y2 = np.expand_dims(y2, -1)     # S2
+
+        # Concatenando las etiquetas para el modelo
+        y_to = np.concatenate((y0, y1, y2), axis=-1)
+
+        # y_to = Y_train[:, 0] + 2 * Y_train[:, 1]
+        # y_to = y_to.astype(int)
+        
+        # Entrenando
+        history = model.fit(x=[X_train[:, :, i] for i in range(X_train.shape[2])], 
+                            y=y_to, epochs=epochs, batch_size=batch_size, 
+                            verbose=1, validation_split=validation_split)
+
+        if test_on_iter:
+            print('\nTesting time\n------------\n')
+            # Definición de las etiquetas de testeo
+            y1 = Y_test[:, 0]
+            y2 = Y_test[:, 1]
+            y0 = np.ones(Y_test.shape[0]) - y1 - y2
+
+            # Acondicionando las etiquetas para testear el modelo
+            y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+            y1 = np.expand_dims(y1, -1)     # S1
+            y2 = np.expand_dims(y2, -1)     # S2
+
+            # Concatenando las etiquetas para el modelo
+            y_to = np.concatenate((y0, y1, y2), axis=-1)
+            
+            # Evaluando
+            eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
+                                       y=y_to, verbose=1, return_dict=True)
+    
+    
     # Y guardando la información del entrenamiento con el testeo
     with open(f'Models/{model_name}.txt', 'a', encoding='utf8') as file:
         file.write(f'{history.history}')
@@ -142,6 +228,9 @@ N_data = len(filenames)
 # Definición de la GPU con la que se trabajará
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
+# Definición del orden de la lista de archivos a leer
+np.random.seed(0)
+order_list = np.random.choice(len(filenames), size=len(filenames), replace=False)
 
 
 # Parámetros de get_model_data
@@ -151,12 +240,15 @@ snr_list = [] # [-1, 0, 1, 5] # [0, 1, 5, 10]
 ind_beg = 0
 ind_end = None
 big_batch_size = 50
-N = 1024
-step = 64
+# N = 1024
+# step = 64
+N = 128
+step = 16
 N_env = 128
 step_env = 16
 padding_value = 2
-activation_percentage = None
+# activation_percentage = None
+activation_percentage = 0.5
 
 apply_bpfilter = True
 bp_parameters = [40, 60, 230, 250]
@@ -164,29 +256,31 @@ bp_parameters = [40, 60, 230, 250]
 append_envelopes = True
 homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
 hilbert_dict = {'analytic_env': True, 'inst_phase': False, 'inst_freq': False}
-simplicity_dict = None # {'N': 64, 'noverlap': 32, 'm': 10, 'tau': 1}
+simplicity_dict =  {'N': 64, 'noverlap': 32, 'm': 10, 'tau': 1}
 vfd_dict = {'N': N_env, 'noverlap': N_env - step_env, 'kmin': 2, 'kmax': 2, 
             'step_size_method': 'unit'}
 wavelet_dict = {'wavelet': 'db4', 'levels': [3,4], 'start_level': 1, 'end_level': 4}
-spec_track_dict = {'freq_obj': [100, 150], 'N': N_env, 'noverlap': N_env - step_env, 
-                   'padding': 0, 'repeat': 0, 'window': 'hann'}
-spec_energy_dict = {'band_limits': [40, 200], 'alpha': 1, 'N': N_env, 
-                    'noverlap': N_env - step_env, 'padding': 0, 'repeat': 0 , 
-                    'window': 'hann'}
+spec_track_dict =  {'freq_obj': [100, 150], 'N': N_env, 'noverlap': N_env - step_env, 
+                    'padding': 0, 'repeat': 0, 'window': 'hann'}
+# spec_energy_dict = {'band_limits': [40, 200], 'alpha': 1, 'N': N_env, 
+#                     'noverlap': N_env - step_env, 'padding': 0, 'repeat': 0 , 
+#                     'window': 'hann'}
+spec_energy_dict = None
 append_fft = False
 
 
 # Parámetros de Red neuronal
 validation_split = 0.1
 batch_size = 70
-epochs = 20
-model_name = 'Model_6_2'
+epochs = 10
+model_name = 'Model_5_2_4_2'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
-loss_func = 'binary_crossentropy'
+# loss_func = 'binary_crossentropy'
+loss_func = 'categorical_crossentropy'
 metrics = ['accuracy', tf.keras.metrics.Recall(), tf.keras.metrics.Precision()]
-loss_weights = [1., 1.]
+loss_weights = None # [1., 1.]
 
 
 
@@ -296,6 +390,10 @@ elif model_name == 'Model_2_8':
     model = model_2_8(input_shape=(X_train.shape[1], X_train.shape[2]), 
                       padding_value=padding_value, name=model_name)
 
+elif model_name == 'Model_2_9':
+    model = model_2_9(input_shape=(X_train.shape[1], X_train.shape[2]), 
+                      padding_value=padding_value, name=model_name)
+
 elif model_name == 'Model_3':
     model = model_3(input_shape=(X_train.shape[1], X_train.shape[2]), 
                     padding_value=padding_value, name=model_name)
@@ -336,12 +434,20 @@ elif model_name == 'Model_5_2_3':
     model = model_5_2_3(input_shape=(X_train.shape[1], X_train.shape[2]),
                         padding_value=padding_value, name=model_name)
 
-elif model_name == 'Model_5_2_4':
-    model = model_5_2_4(input_shape=(X_train.shape[1], X_train.shape[2]),
-                        padding_value=padding_value, name=model_name)
+# elif 'Model_5_2_4' in model_name:
+#     model = model_5_2_4(input_shape=(X_train.shape[1], X_train.shape[2]),
+#                         padding_value=padding_value, name=model_name)
 
 elif model_name == 'Model_5_2_4_1':
     model = model_5_2_4_1(input_shape=(X_train.shape[1], X_train.shape[2]),
+                          padding_value=padding_value, name=model_name)
+
+elif model_name == 'Model_5_2_4_2':
+    model = model_5_2_4_2(input_shape=(X_train.shape[1], X_train.shape[2]),
+                          padding_value=padding_value, name=model_name)
+    
+elif model_name == 'Model_5_2_4_3':
+    model = model_5_2_4_3(input_shape=(X_train.shape[1], X_train.shape[2]),
                           padding_value=padding_value, name=model_name)
 
 elif model_name == 'Model_5_2_5':
@@ -367,18 +473,31 @@ elif 'Model_5_2_9' in model_name:
 elif 'Model_6_1' in model_name:
     model = model_6_1(input_shape=(X_train.shape[1], X_train.shape[2]),
                       padding_value=padding_value, name=model_name)
+    
+elif 'Model_6_2' in model_name:
+    model = model_6_2(input_shape=(X_train.shape[1], X_train.shape[2]),
+                      padding_value=padding_value, name=model_name)
 
+elif 'Model_6_3' in model_name:
+    model = model_6_3(input_shape=(X_train.shape[1], X_train.shape[2]),
+                      padding_value=padding_value, name=model_name)
+    
+elif 'Model_6_4' in model_name:
+    model = model_6_4(input_shape=(X_train.shape[1], X_train.shape[2]),
+                      padding_value=padding_value, name=model_name)
 
 # Compilando las opciones del modelo
 if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
                   'Model_2_2', 'Model_2_3', 'Model_2_4', 'Model_2_5', 'Model_2_6', 'Model_2_7', 
                   'Model_2_7_2', 'Model_2_8', 'Model_4_1', 'Model_4_2', 'Model_4_3', 'Model_4_4', 
                   'Model_5_1', 'Model_5_1_1', 'Model_5_2_1', 'Model_5_2_2', 'Model_5_2_3', 
-                  'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6', 'Model_5_2_7',
-                  'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt', 'Model_5_2_9_alt_2']:
+                  'Model_5_2_4', 'Model_5_2_4_again', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6', 
+                  'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt', 'Model_5_2_9_alt_2']:
     loss_model = [loss_func, loss_func]
 
-elif model_name in ['Model_3', 'Model_6_1', 'Model_6_1_noised']:
+elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Model_6_1_onechannel',
+                    'Model_6_2', 'Model_6_3', 'Model_6_4_onechannel', 'Model_6_4_typicalchannels',
+                    'Model_5_2_4_2', 'Model_5_2_4_3']:
     loss_model = loss_func
 
 # Compilando las opciones
@@ -457,7 +576,7 @@ if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_h
 
 elif model_name in ['Model_5_2_3', 'Model_5_2_4', 'Model_5_2_4_1', 'Model_5_2_5', 'Model_5_2_6',
                     'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt', 
-                    'Model_5_2_9_alt_2']:
+                    'Model_5_2_9_alt_2', 'Model_5_2_4_again']:
     print('\nTesting time\n------------\n')
     eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
                             y=[Y_test[:,0], Y_test[:,1]], verbose=1,
@@ -468,7 +587,8 @@ elif model_name in ['Model_3']:
     eval_info = model.evaluate(x=X_test, y=Y_test[:,0] + Y_test[:,1], verbose=1,
                                 return_dict=True)
     
-elif model_name in ['Model_6_1', 'Model_6_1_noised']:
+elif model_name in ['Model_6_1', 'Model_6_1_noised', 'Model_6_1_onechannel', 'Model_6_2', 'Model_6_3', 
+                    'Model_6_4_onechannel', 'Model_6_4_typicalchannels']:
     print('\nTesting time\n------------\n')
     # Definición de las etiquetas de testeo
     y1 = Y_test[:, :, 0]
@@ -486,6 +606,43 @@ elif model_name in ['Model_6_1', 'Model_6_1_noised']:
     # Evaluando
     eval_info = model.evaluate(x=X_test, y=y_to, verbose=1, return_dict=True)
 
+elif model_name in ['Model_2_9']:
+    print('\nTesting time\n------------\n')
+    # Definición de las etiquetas de testeo
+    y1 = Y_test[:, 0]
+    y2 = Y_test[:, 1]
+    y0 = np.ones(Y_test.shape[:-1]) - y1 - y2
+
+    # Acondicionando las etiquetas para testear el modelo
+    y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+    y1 = np.expand_dims(y1, -1)     # S1
+    y2 = np.expand_dims(y2, -1)     # S2
+
+    # Concatenando las etiquetas para el modelo
+    y_to = np.concatenate((y0, y1, y2), axis=-1)
+    
+    # Evaluando
+    eval_info = model.evaluate(x=X_test, y=y_to, verbose=1, return_dict=True)
+
+
+elif model_name in ['Model_5_2_4_2', 'Model_5_2_4_3']:
+    print('\nTesting time\n------------\n')
+    # Definición de las etiquetas de testeo
+    y1 = Y_test[:, 0]
+    y2 = Y_test[:, 1]
+    y0 = np.ones(Y_test.shape[0]) - y1 - y2
+
+    # Acondicionando las etiquetas para testear el modelo
+    y0 = np.expand_dims(y0, -1)     # Segmentos intermedios
+    y1 = np.expand_dims(y1, -1)     # S1
+    y2 = np.expand_dims(y2, -1)     # S2
+
+    # Concatenando las etiquetas para el modelo
+    y_to = np.concatenate((y0, y1, y2), axis=-1)
+    
+    # Evaluando
+    eval_info = model.evaluate(x=[X_test[:, :, i] for i in range(X_test.shape[2])], 
+                               y=y_to, verbose=1, return_dict=True)
 
 # Y guardando la información del entrenamiento con el testeo
 with open(f'Models/{model_name}.txt', 'a', encoding='utf8') as file:

@@ -503,26 +503,294 @@ def test_correlate_functions():
     print('energy_3: ', np.mean(reg_dict['energy_3']), '+-', np.std(reg_dict['energy_3']))
 
 
+def test_cnn_all_input():
+    import os
+    import pywt
+    import pydot
+    import numpy as np
+    import soundfile as sf
+    import tensorflow as tf
+    import matplotlib.pyplot as plt
+    from tqdm import tqdm
+    from ast import literal_eval
+    from scipy import signal, stats
+    from scipy.interpolate import interp1d
+    from scipy.io import wavfile, loadmat
+    from collections import defaultdict
+    
+    
+    def segnet_based_1_1_all(input_shape, padding_value, name=None):
+        '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+        Se utiliza el mismo canal para todas las envolventes.
+        
+        Envolventes usadas:
+        - Filtros homomórficos
+        - Envolventes de Hilbert
+        - DWT
+        - Energy envolve
+        
+        Salida de 3 etiquetas:
+        - S1
+        - S2
+        - None
+        
+        References
+        ----------
+        [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+            Segnet: A deep convolutional encoder-decoder architecture for 
+            image segmentation. IEEE transactions on pattern analysis and 
+            machine intelligence, 39(12), 2481-2495.
+        [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+            encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+        '''
+        def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                            kernel_initializer, name):
+            '''Función auxiliar que modela las capas azules conv + batchnorm +
+            Activation ReLU para realizar el ENCODING.'''
+            # Aplicando la concatenación de capas
+            x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                            kernel_initializer=kernel_initializer,
+                                            padding=padding, 
+                                            name=f'Conv_{name}')(input_layer)
+            x_conv = \
+                tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+            x_conv = \
+                tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
 
+            return x_conv
+        
+        
+        def _encoding_layer(input_layer, n_layers_conv, layer_params):
+            '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+            una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+            '''
+            # Definición de la salida de este bloque
+            x_enc = input_layer
+            
+            # Aplicando "n_layers_conv" capas convolucionales de codificación
+            for i in range(n_layers_conv):
+                x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                        kernel_size=layer_params['kernel_size'], 
+                                        padding=layer_params['padding'],
+                                        kernel_initializer=layer_params['kernel_initializer'], 
+                                        name=f"{layer_params['name']}_{i}")
+
+            # Finalmente la capa de MaxPooling
+            x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                                padding='valid',
+                                                name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+            return x_enc
+        
+        
+        def _decoding_layer(input_layer, n_layers_conv, layer_params):
+            '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+            "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+            '''
+            # Capa de upsampling
+            x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                            f"{layer_params['name']}")(input_layer)
+            
+            # Aplicando "n_layers_conv" capas convolucionales de decodificación
+            for i in range(n_layers_conv):
+                x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                        kernel_size=layer_params['kernel_size'], 
+                                        padding=layer_params['padding'],
+                                        kernel_initializer=layer_params['kernel_initializer'], 
+                                        name=f"{layer_params['name']}_{i}")
+
+            return x_dec
+        
+        
+        # Definición de la entrada
+        x_in = tf.keras.Input(shape=input_shape, dtype='float32')
+
+        # Definición de la capa de máscara
+        x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+        ############        Definición de las capas convolucionales        ############
+        
+        ### Encoding ###
+        
+        # Primera capa de encoding
+        layer_params_1 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'enc1'}
+        x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+        
+        # Segunda capa de encoding
+        layer_params_2 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'enc2'}
+        x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+        
+        # Tercera capa de encoding
+        layer_params_3 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'enc3'}
+        x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+        
+        # Cuarta capa de encoding
+        layer_params_4 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'enc4'}
+        x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+        
+        
+        ### Decoding ###
+        
+        # Cuarta capa de salida del decoding
+        layer_params_4 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'dec4'}
+        x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+        
+        # Tercera capa de salida del decoding
+        layer_params_3 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'dec3'}
+        x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+        
+        # Segunda capa de salida del decoding
+        layer_params_2 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'dec2'}
+        x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+        
+        # Primera capa de salida del decoding
+        layer_params_1 = {'filters': 13, 'kernel_size': 200, 'padding': 'same',
+                        'kernel_initializer': 'he_normal', 'name': 'dec1'}
+        x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                        
+        
+        # Aplicando reshape
+        # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+        
+        # Definición de la capa de salida
+        x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                    name='softmax_out')(x_dec1)
+        
+        # Definición del modelo
+        model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+        
+        return model
+        
+        
+    # Definición de la GPU con la que se trabajará
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    # Obtención de los archivos de testeo
+    heart_db = 'PhysioNet 2016 CINC Heart Sound Database'
+    # db_ultimate = 'PhysioNet 2016 CINC Heart Sound Database'
+    wav_files = [f'{heart_db}/{i}' for i in os.listdir(heart_db) if i.endswith('.wav')]
+
+    # Parámetros de cantidad de audio
+    q_audio = 10
+
+    # Definición de los largos de cada ventana
+    N_env_vfd = 64
+    step_env_vfd = 8
+    N_env_spec = 64
+    step_env_spec = 8
+    N_env_energy = 128
+    step_env_energy = 16
+
+    # Definición de los diccionarios
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+
+
+    # Audios
+    audio_list = list()
+
+    for wav_file in tqdm(wav_files[:q_audio], desc='Database', ncols=70):
+        # Cargando el archivo de audio
+        samplerate, audio = wavfile.read(wav_file)
+        
+        audio_list.append(audio / max(abs(audio)))
+    
+    
+    # Definición de la carpeta con la base de datos
+    db_folder = 'PhysioNet 2016 CINC Heart Sound Database'
+    # Obtener todos los archivos .mat de la base de datos
+    mat_files = [i for i in os.listdir(db_folder) if i.endswith('.mat')]
+
+    # Definición de las etiquetas a considerar
+    s1_labels_list = list()
+    s2_labels_list = list()
+    s0_labels_list = list() 
+
+    for mat_name in mat_files[:q_audio]:
+        # Obtención de los datos del archivo .mat
+        data_info = loadmat(f'{db_folder}/{mat_name}')
+        
+        # Etiquetas a 50 Hz de samplerate
+        labels = data_info['PCG_states']
+        
+        # Pasando a 1000 Hz
+        labels_adj = np.repeat(labels, 20)
+        
+        # Agregando a la lista
+        s1_labels_list.append(labels_adj == 1)
+        s2_labels_list.append(labels_adj == 3)
+        s0_labels_list.append(np.ones(len(labels_adj)) - (labels_adj == 1) - (labels_adj == 3))
+        
+        
+        
+    audios_padded = tf.keras.preprocessing.sequence.pad_sequences(audio_list, padding='post', value=2, dtype='float32')
+    s1_labels_padded = \
+        tf.keras.preprocessing.sequence.pad_sequences(s1_labels_list, padding='post', value=2, dtype='float32')
+    s2_labels_padded = \
+        tf.keras.preprocessing.sequence.pad_sequences(s2_labels_list, padding='post', value=2, dtype='float32')
+    s0_labels_padded = \
+        tf.keras.preprocessing.sequence.pad_sequences(s0_labels_list, padding='post', value=2, dtype='float32')
+
+    audios_padded = np.expand_dims(audios_padded, -1)
+    y1 = np.expand_dims(s1_labels_padded, -1)
+    y2 = np.expand_dims(s2_labels_padded, -1)
+    y0 = np.expand_dims(s0_labels_padded, -1)
+
+    y_to = np.concatenate((y0, y1, y2), axis=-1)
+        
+    model = segnet_based_1_1_all(input_shape=(audios_padded.shape[1], audios_padded.shape[2]), 
+                             padding_value=10)
+    model.summary()
+    
+    optimizer = 'Adam'
+    loss_func = 'categorical_crossentropy'
+    metrics = ['accuracy', tf.keras.metrics.Recall(), tf.keras.metrics.Precision()]
+    loss_weights = None # [1., 1.]
+    model.compile(optimizer=optimizer, loss=loss_func,
+                metrics=metrics, loss_weights=loss_weights)
+    
+    model.fit(x=audios_padded, y=y_to, epochs=10, batch_size=70, verbose=1, validation_split=0.1)
+    
+    
 
 
 ## Módulo de testeo ##
-name_func = 'test_correlate_functions'
-
-
-if name_func == 'test_heart_sound':
-    db_folder = 'PhysioNet 2016 CINC Heart Sound Database'
-    model_name = 'Model_5_2_9'
-
-    # test_heart_sound(model_name)
-    filenames = get_test_filenames(model_name, db_folder)
-    test_heart_sound(model_name, filenames[2], db_folder)
-
-
-elif name_func == 'test_envelope_images':
-    test_envelope_images()
+if __name__ == '__main__':
+    # Definición de la función a aplciar
+    name_func = 'test_cnn_all_input'
     
     
-elif name_func == 'test_correlate_functions':
-    test_correlate_functions()
+    if name_func == 'test_heart_sound':
+        db_folder = 'PhysioNet 2016 CINC Heart Sound Database'
+        model_name = 'Model_5_2_9'
 
+        # test_heart_sound(model_name)
+        filenames = get_test_filenames(model_name, db_folder)
+        test_heart_sound(model_name, filenames[2], db_folder)
+
+
+    elif name_func == 'test_envelope_images':
+        test_envelope_images()
+        
+        
+    elif name_func == 'test_correlate_functions':
+        test_correlate_functions()
+
+    elif name_func == 'test_cnn_all_input':
+        test_cnn_all_input()

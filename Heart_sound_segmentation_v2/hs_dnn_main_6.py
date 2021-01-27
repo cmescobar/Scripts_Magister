@@ -12,12 +12,12 @@ from heart_sound_DNN_models import model_2_1, model_2_2, model_2_3, model_2_4, \
     model_5_2_8, model_5_2_9, model_6_1, model_6_2, model_6_3, model_2_9, model_6_4, \
     model_5_2_4_2, model_5_2_4_3, model_7_1, model_7_2, model_7_1_2, model_5_2_4_3, \
     model_4_5, model_8_1, model_8_2, model_8_3
-from paper_DNN_models import cnn_dnn_1_1, cnn_dnn_1_2, segnet_based_1_1, segnet_based_1_2, \
+from paper_DNN_models_OLD import cnn_dnn_1_1, cnn_dnn_1_2, segnet_based_1_1, segnet_based_1_2, \
     segnet_based_2_1, segnet_based_2_2, segnet_based_2_3, segnet_based_2_4, segnet_based_2_5, \
     segnet_based_2_6, segnet_based_2_7, segnet_based_2_8, segnet_based_2_9, segnet_based_2_10, \
     segnet_based_2_11, segnet_based_2_12, cnn_dnn_1_3, cnn_dnn_1_4, segnet_based_1_3, \
-    segnet_based_1_4
-
+    segnet_based_1_4, segnet_based_2_13, segnet_based_2_14, segnet_based_2_15, segnet_based_2_16, \
+    segnet_based_2_17, segnet_based_2_18, segnet_based_2_19, segnet_based_2_20, segnet_based_2_21
 from heart_sound_physionet_management import get_model_data, get_model_data_idxs
 
 
@@ -88,7 +88,10 @@ def model_train_iteration(model, model_name, index_list, epoch_train):
                         'segnet_based_2_3', 'segnet_based_2_4', 'segnet_based_2_5',
                         'segnet_based_2_6', 'segnet_based_2_7', 'segnet_based_2_8',
                         'segnet_based_2_9', 'segnet_based_2_10', 'segnet_based_2_11',
-                        'segnet_based_2_12', 'segnet_based_1_3']:
+                        'segnet_based_2_12', 'segnet_based_1_3', 'segnet_based_2_13',
+                        'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
+                        'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
+                        'segnet_based_2_20', 'segnet_based_2_21']:
         print('\nTraining time\n------------\n')
         # Definición de las etiquetas de entrenamiento
         y1 = Y_train[:, :, 0]
@@ -329,20 +332,13 @@ bp_parameters = [20, 30, 180, 190]
 validation_split = 0.1
 batch_size = 70
 epochs = 20
-model_name = 'segnet_based_1_4'
+model_name = 'segnet_based_2_21'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
 loss_func = 'categorical_crossentropy'
 metrics = ['accuracy', tf.keras.metrics.Recall(), tf.keras.metrics.Precision()]
 loss_weights = None # [1., 1.]
-
-
-
-sakjdgsajdsadasjdsa
-
-
-
 
 # Parámetros de envolvente para cada caso
 if model_name == 'cnn_dnn_1_1':
@@ -822,6 +818,231 @@ elif model_name == 'segnet_based_2_12':
     append_fft = False
 
 
+elif model_name == 'segnet_based_2_13':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = None
+    hilbert_dict = None
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict = None
+    spec_energy_dict = None
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_14':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = None
+    hilbert_dict = {'analytic_env': False, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict = None
+    spec_energy_dict = None
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_15':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = None
+    hilbert_dict = {'analytic_env': False, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict = None
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_16':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = None
+    hilbert_dict = {'analytic_env': False, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict =  {'freq_obj': [40], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_17':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': False, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict =  {'freq_obj': [40], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_18':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': False, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_19':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_20':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = None
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_21':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                           'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+
+
 
 ###############       Definición de parámetros       ###############
 
@@ -1142,7 +1363,41 @@ elif model_name in ['segnet_based_2_12']:
     model = segnet_based_2_12(input_shape=(X_train.shape[1], X_train.shape[2]),
                               padding_value=padding_value, name=model_name)
     
+elif model_name in ['segnet_based_2_13']:
+    model = segnet_based_2_13(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
 
+elif model_name in ['segnet_based_2_14']:
+    model = segnet_based_2_14(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_2_15']:
+    model = segnet_based_2_15(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_16']:
+    model = segnet_based_2_16(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_17']:
+    model = segnet_based_2_17(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_18']:
+    model = segnet_based_2_18(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_19']:
+    model = segnet_based_2_19(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_20']:
+    model = segnet_based_2_20(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_21']:
+    model = segnet_based_2_21(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
 
 
 # Compilando las opciones del modelo
@@ -1168,7 +1423,10 @@ elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Mo
                     'segnet_based_2_2', 'segnet_based_2_3', 'segnet_based_2_4', 'segnet_based_2_5',
                     'segnet_based_2_6', 'segnet_based_2_7', 'segnet_based_2_8', 'segnet_based_2_9',
                     'segnet_based_2_10', 'segnet_based_2_11', 'segnet_based_2_12', 'cnn_dnn_1_3',
-                    'cnn_dnn_1_4', 'segnet_based_1_3', 'segnet_based_1_4']:
+                    'cnn_dnn_1_4', 'segnet_based_1_3', 'segnet_based_1_4', 'segnet_based_2_13', 
+                    'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
+                    'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
+                    'segnet_based_2_20', 'segnet_based_2_21']:
     loss_model = loss_func
 
 # Compilando las opciones
@@ -1276,7 +1534,10 @@ elif model_name in ['Model_6_1', 'Model_6_1_noised', 'Model_6_1_onechannel', 'Mo
                     'segnet_based_2_2', 'segnet_based_2_3', 'segnet_based_2_4', 
                     'segnet_based_2_5', 'segnet_based_2_6', 'segnet_based_2_7', 
                     'segnet_based_2_8', 'segnet_based_2_9', 'segnet_based_2_10', 
-                    'segnet_based_2_11', 'segnet_based_2_12']:
+                    'segnet_based_2_11', 'segnet_based_2_12', 'segnet_based_2_13', 
+                    'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
+                    'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
+                    'segnet_based_2_20', 'segnet_based_2_21']:
     print('\nTesting time\n------------\n')
     # Definición de las etiquetas de testeo
     y1 = Y_test[:, :, 0]

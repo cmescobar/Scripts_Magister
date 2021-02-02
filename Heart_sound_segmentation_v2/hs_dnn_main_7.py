@@ -19,12 +19,19 @@ from paper_DNN_models import cnn_dnn_1_1, cnn_dnn_1_2, segnet_based_1_1, segnet_
     segnet_based_2_11, segnet_based_2_12, cnn_dnn_1_3, cnn_dnn_1_4, segnet_based_1_3, \
     segnet_based_1_4, segnet_based_2_13, segnet_based_2_14, segnet_based_2_15, segnet_based_2_16, \
     segnet_based_2_17, segnet_based_2_18, segnet_based_2_19, segnet_based_2_20, segnet_based_2_21, \
-    segnet_based_1_1_all, segnet_based_1_2_all, segnet_based_1_3_all, segnet_based_1_4_all
+    segnet_based_1_1_all, segnet_based_1_2_all, segnet_based_1_3_all, segnet_based_1_4_all, \
+    segnet_based_3_1, segnet_based_3_2, segnet_based_3_3, segnet_based_3_4, segnet_based_3_5, \
+    segnet_based_3_6, segnet_based_3_7, segnet_based_3_8, segnet_based_3_9, segnet_based_3_10, \
+    segnet_based_3_11, segnet_based_3_12, segnet_based_3_13, segnet_based_3_14, segnet_based_3_15, \
+    segnet_based_4_1, segnet_based_4_2, segnet_based_4_3, segnet_based_4_4, segnet_based_5_x, \
+    segnet_based_6_1, segnet_based_6_2, segnet_based_6_3, segnet_based_6_4, segnet_based_6_5, \
+    segnet_based_6_6, segnet_based_6_7, segnet_based_6_8, segnet_based_6_9, segnet_based_6_10
 from heart_sound_physionet_management import get_model_data, get_model_data_idxs
 
 
 # Definición de la carpeta con la base de datos
 db_folder = 'PhysioNet 2016 CINC Heart Sound Database'
+
 
 # Función que permitirá iterar sobre cada modelo, sin sobrepasar los límites de memoria
 def model_train_iteration(model, model_name, index_list, epoch_train):
@@ -58,7 +65,19 @@ def model_train_iteration(model, model_name, index_list, epoch_train):
                       'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
                       'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
                       'segnet_based_2_20', 'segnet_based_2_21', 'segnet_based_1_1_all',
-                      'segnet_based_1_3_all']:
+                      'segnet_based_1_3_all', 'segnet_based_3_1', 'segnet_based_3_2',
+                      'segnet_based_3_3', 'segnet_based_3_4', 'segnet_based_3_5',
+                      'segnet_based_3_6', 'segnet_based_3_7', 'segnet_based_3_8',
+                      'segnet_based_3_9', 'segnet_based_3_10', 'segnet_based_3_11',
+                      'segnet_based_3_12', 'segnet_based_3_13', 'segnet_based_3_14',
+                      'segnet_based_3_15', 'segnet_based_4_1', 'segnet_based_4_2',
+                      'segnet_based_4_3', 'segnet_based_4_4', 'segnet_based_5_1',
+                      'segnet_based_5_2', 'segnet_based_5_3', 'segnet_based_5_4',
+                      'segnet_based_5_5', 'segnet_based_5_6', 'segnet_based_5_7',
+                      'segnet_based_6_1', 'segnet_based_6_2', 'segnet_based_6_3',
+                      'segnet_based_6_4', 'segnet_based_6_5', 'segnet_based_6_6',
+                      'segnet_based_6_7', 'segnet_based_6_8', 'segnet_based_6_9',
+                      'segnet_based_6_10']:
         print('\nTraining time\n------------\n')
         # Definición de las etiquetas de entrenamiento
         y1 = Y_train[:, :, 0]
@@ -190,13 +209,15 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
     if type_op == 'val':
         to_print = '\nValidation time\n---------------\n'
         print('Etapa de validación\n-------------------')
+        snr_list_to = snr_list
     elif type_op == 'test':
         to_print = '\nTesting time\n------------\n'
         print('Etapa de testeo\n---------------')
+        snr_list_to = list()
     
     # Definición de los datos de validación
     X_data, Y_data = \
-        get_model_data_idxs(db_folder, snr_list=snr_list, index_list=index_list, N=N, 
+        get_model_data_idxs(db_folder, snr_list=snr_list_to, index_list=index_list, N=N, 
                             noverlap=N-step, padding_value=padding_value, 
                             activation_percentage=activation_percentage, 
                             append_audio=append_audio, 
@@ -222,7 +243,19 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
                       'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
                       'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
                       'segnet_based_2_20', 'segnet_based_2_21', 'segnet_based_1_1_all',
-                      'segnet_based_1_3_all']:
+                      'segnet_based_1_3_all', 'segnet_based_3_1', 'segnet_based_3_2',
+                      'segnet_based_3_3', 'segnet_based_3_4', 'segnet_based_3_5',
+                      'segnet_based_3_6', 'segnet_based_3_7', 'segnet_based_3_8',
+                      'segnet_based_3_9', 'segnet_based_3_10', 'segnet_based_3_11',
+                      'segnet_based_3_12', 'segnet_based_3_13', 'segnet_based_3_14',
+                      'segnet_based_3_15', 'segnet_based_4_1', 'segnet_based_4_2',
+                      'segnet_based_4_3', 'segnet_based_4_4', 'segnet_based_5_1',
+                      'segnet_based_5_2', 'segnet_based_5_3', 'segnet_based_5_4',
+                      'segnet_based_5_5', 'segnet_based_5_6', 'segnet_based_5_7',
+                      'segnet_based_6_1', 'segnet_based_6_2', 'segnet_based_6_3',
+                      'segnet_based_6_4', 'segnet_based_6_5', 'segnet_based_6_6',
+                      'segnet_based_6_7', 'segnet_based_6_8', 'segnet_based_6_9',
+                      'segnet_based_6_10']:
         print(to_print)
         # Definición de las etiquetas de testeo
         y1 = Y_data[:, :, 0]
@@ -313,13 +346,13 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
 ###############       Definición de parámetros       ###############
 
 # Definición de la GPU con la que se trabajará
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 # Carpeta a guardar
 filepath_to_save = 'Paper_models'
 
 # Parámetros de get_model_data
-snr_list =  [] # [-1, 0, 1, 5] # [0, 1, 5, 10]
+snr_list = []
 big_batch_size = 160
 padding_value = 2
 
@@ -340,7 +373,7 @@ bp_parameters = [20, 30, 180, 190]
 validation_split = 0.1
 batch_size = 70
 epochs = 20
-model_name = 'segnet_based_2_6'
+model_name = 'segnet_based_6_2'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
@@ -1051,6 +1084,142 @@ elif model_name == 'segnet_based_2_21':
     append_fft = False
 
 
+elif model_name in ['segnet_based_3_1', 'segnet_based_3_2', 'segnet_based_3_3',
+                    'segnet_based_3_4', 'segnet_based_3_5', 'segnet_based_3_6',
+                    'segnet_based_3_7', 'segnet_based_3_8', 'segnet_based_3_9',
+                    'segnet_based_3_10', 'segnet_based_3_11', 'segnet_based_3_12',
+                    'segnet_based_3_13', 'segnet_based_3_14', 'segnet_based_3_15']:
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+elif model_name in ['segnet_based_4_1', 'segnet_based_4_2', 'segnet_based_4_3',
+                    'segnet_based_4_4']:
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+elif model_name in ['segnet_based_5_1', 'segnet_based_5_2', 'segnet_based_5_3',
+                    'segnet_based_5_4', 'segnet_based_5_5', 'segnet_based_5_6',
+                    'segnet_based_5_7']:
+    
+    if model_name == 'segnet_based_5_1':
+        snr_list = [5]
+        
+    elif model_name == 'segnet_based_5_2':
+        snr_list = [1, 5]
+        
+    elif model_name == 'segnet_based_5_3':
+        snr_list = [0, 1, 5]
+        
+    elif model_name == 'segnet_based_5_4':
+        snr_list = [-1, 0, 1, 5]
+        
+    elif model_name == 'segnet_based_5_5':
+        snr_list = [-1, 0, 1]
+        
+    elif model_name == 'segnet_based_5_6':
+        snr_list = [-1, 0]
+        
+    elif model_name == 'segnet_based_5_7':
+        snr_list = [-1]
+ 
+    
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+elif model_name in ['segnet_based_6_1', 'segnet_based_6_2', 'segnet_based_6_3',
+                    'segnet_based_6_4', 'segnet_based_6_5', 'segnet_based_6_6',
+                    'segnet_based_6_7', 'segnet_based_6_8', 'segnet_based_6_9',
+                    'segnet_based_6_10']:
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
 
 
 
@@ -1428,6 +1597,128 @@ elif model_name in ['segnet_based_2_21']:
     model = segnet_based_2_21(input_shape=(X_train.shape[1], X_train.shape[2]),
                               padding_value=padding_value, name=model_name)
 
+elif model_name in ['segnet_based_3_1']:
+    model = segnet_based_3_1(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_2']:
+    model = segnet_based_3_2(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_3']:
+    model = segnet_based_3_3(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_4']:
+    model = segnet_based_3_4(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_5']:
+    model = segnet_based_3_5(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_3_6']:
+    model = segnet_based_3_6(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_7']:
+    model = segnet_based_3_7(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_8']:
+    model = segnet_based_3_8(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_9']:
+    model = segnet_based_3_9(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_10']:
+    model = segnet_based_3_10(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_3_11']:
+    model = segnet_based_3_11(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_3_12']:
+    model = segnet_based_3_12(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_13']:
+    model = segnet_based_3_13(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_14']:
+    model = segnet_based_3_14(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_3_15']:
+    model = segnet_based_3_15(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_4_1']:
+    model = segnet_based_4_1(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_4_2']:
+    model = segnet_based_4_2(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_4_3']:
+    model = segnet_based_4_3(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_4_4']:
+    model = segnet_based_4_4(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_5_1', 'segnet_based_5_2', 'segnet_based_5_3', 
+                    'segnet_based_5_4', 'segnet_based_5_5', 'segnet_based_5_6', 
+                    'segnet_based_5_7']:
+    model = segnet_based_5_x(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_6_1']:
+    model = segnet_based_6_1(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_6_2']:
+    model = segnet_based_6_2(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_6_3']:
+    model = segnet_based_6_3(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_6_4']:
+    model = segnet_based_6_4(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_6_5']:
+    model = segnet_based_6_5(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_6_6']:
+    model = segnet_based_6_6(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_6_7']:
+    model = segnet_based_6_7(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_6_8']:
+    model = segnet_based_6_8(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_6_9']:
+    model = segnet_based_6_9(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_6_10']:
+    model = segnet_based_6_10(input_shape=(X_train.shape[1], X_train.shape[2]),
+                             padding_value=padding_value, name=model_name)
+
 
 # Compilando las opciones del modelo
 if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_hyper-noise',
@@ -1438,6 +1729,7 @@ if model_name in ['Model_2_1', 'Model_2_1_2', 'Model_2_1_no-noise', 'Model_2_1_h
                   'Model_5_2_7', 'Model_5_2_8', 'Model_5_2_9', 'Model_5_2_9_alt', 'Model_5_2_9_alt_2',
                   'cnn_dnn_1_2']:
     loss_model = [loss_func, loss_func]
+
 
 elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Model_6_1_onechannel',
                     'Model_6_2', 'Model_6_3', 'Model_6_4_onechannel', 'Model_6_4_typicalchannels',
@@ -1456,7 +1748,19 @@ elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Mo
                     'segnet_based_2_14', 'segnet_based_2_15', 'segnet_based_2_16',
                     'segnet_based_2_17', 'segnet_based_2_18', 'segnet_based_2_19',
                     'segnet_based_2_20', 'segnet_based_2_21', 'segnet_based_1_1_all', 
-                    'segnet_based_1_2_all', 'segnet_based_1_3_all', 'segnet_based_1_4_all']:
+                    'segnet_based_1_2_all', 'segnet_based_1_3_all', 'segnet_based_1_4_all',
+                    'segnet_based_3_1', 'segnet_based_3_2', 'segnet_based_3_3',
+                    'segnet_based_3_4', 'segnet_based_3_5', 'segnet_based_3_6',
+                    'segnet_based_3_7', 'segnet_based_3_8', 'segnet_based_3_9',
+                    'segnet_based_3_10', 'segnet_based_3_11', 'segnet_based_3_12',
+                    'segnet_based_3_13', 'segnet_based_3_14', 'segnet_based_3_15',
+                    'segnet_based_4_1', 'segnet_based_4_2', 'segnet_based_4_3',
+                    'segnet_based_4_4', 'segnet_based_5_1', 'segnet_based_5_2', 
+                    'segnet_based_5_3', 'segnet_based_5_4', 'segnet_based_5_5', 
+                    'segnet_based_5_6', 'segnet_based_5_7', 'segnet_based_6_1',
+                    'segnet_based_6_2', 'segnet_based_6_3', 'segnet_based_6_4',
+                    'segnet_based_6_5', 'segnet_based_6_6', 'segnet_based_6_7',
+                    'segnet_based_6_8', 'segnet_based_6_9', 'segnet_based_6_19',]:
     loss_model = loss_func
 
 # Compilando las opciones
@@ -1509,7 +1813,7 @@ for epoch in range(epochs):
     model_bigbatch_evaluation(model, model_name, index_list=val_list, epoch=epoch, 
                               type_op='val')
 
-    print(f'---------- Fin epoch {epoch+1} ----------\n\n')
+    print(f'\n---------- Fin epoch {epoch+1} ----------\n\n')
     
 
 

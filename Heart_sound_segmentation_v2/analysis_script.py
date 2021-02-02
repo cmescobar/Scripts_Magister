@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from ast import literal_eval
+from paper_DNN_models import segnet_based_3_6, segnet_based_3_14
 
 
 def get_architecture_results_OLD():
@@ -90,7 +91,7 @@ def get_architecture_results():
     
     ###########         Parámetros         ###########
     # Definición del experimento a revisar
-    experiments = ['cnn_dnn_1_1', 'cnn_dnn_1_2', 'cnn_dnn_1_3', 'cnn_dnn_1_4']
+    # experiments = ['cnn_dnn_1_1', 'cnn_dnn_1_2', 'cnn_dnn_1_3', 'cnn_dnn_1_4']
     # experiments = ['segnet_based_1_3', 'segnet_based_1_4', 'segnet_based_1_1',
     #                'segnet_based_1_2']
     # experiments = ['segnet_based_1_3_all', 'segnet_based_1_4_all', 
@@ -98,7 +99,18 @@ def get_architecture_results():
     # experiments = ['segnet_based_2_1', 'segnet_based_2_2', 'segnet_based_2_3',
     #                'segnet_based_2_4', 'segnet_based_2_5', 'segnet_based_2_6',
     #                'segnet_based_2_7', 'segnet_based_2_8', 'segnet_based_2_9',
-    #                'segnet_based_2_10', 'segnet_based_2_11', 'segnet_based_2_12']
+    #                'segnet_based_2_10', 'segnet_based_2_11', 'segnet_based_2_12',
+    #                'segnet_based_2_13', 'segnet_based_2_14', 'segnet_based_2_15',
+    #                'segnet_based_2_16', 'segnet_based_2_17', 'segnet_based_2_18',
+    #                'segnet_based_2_19', 'segnet_based_2_20', 'segnet_based_2_21']
+    # experiments = ['segnet_based_3_1', 'segnet_based_3_2', 'segnet_based_3_3',
+    #                'segnet_based_3_4', 'segnet_based_3_5', 'segnet_based_3_6',
+    #                'segnet_based_3_7', 'segnet_based_3_8', 'segnet_based_3_9',
+    #                'segnet_based_3_10', 'segnet_based_3_11', 'segnet_based_3_12',
+    #                'segnet_based_3_13', 'segnet_based_3_14']
+    
+    experiments = ['segnet_based_4_1', 'segnet_based_4_2', 'segnet_based_4_3',
+                   'segnet_based_4_4']
     
     for exp in experiments:
         with open(f'Paper_models/{exp}/{exp}.txt', 'r', encoding='utf8') as file:
@@ -148,27 +160,46 @@ def get_architecture_results():
 
 def get_qparams_network():
     '''Rutina para contar la cantidad de parámetros entrenables de una red'''
-    models = ['cnn_dnn_1_1', 'cnn_dnn_1_2', 'cnn_dnn_1_3', 'cnn_dnn_1_4']
+    # models = ['cnn_dnn_1_1', 'cnn_dnn_1_2', 'cnn_dnn_1_3', 'cnn_dnn_1_4']
     # models = ['segnet_based_1_3_all', 'segnet_based_1_4_all', 'segnet_based_1_1_all',
     #           'segnet_based_1_2_all']
+    # models = ['segnet_based_3_1', 'segnet_based_3_2', 'segnet_based_3_3',
+    #             'segnet_based_3_4', 'segnet_based_3_5', 'segnet_based_3_6',
+    #             'segnet_based_3_7', 'segnet_based_3_8', 'segnet_based_3_9',
+    #             'segnet_based_3_10', 'segnet_based_3_11', 'segnet_based_3_12',
+    #             'segnet_based_3_13', 'segnet_based_3_14']
+    models = ['segnet_based_3_6', 'segnet_based_3_14']
+    
     
     for model_name in models:
-        # Cargar el modelo
-        model = tf.keras.models.load_model(f'Paper_models/{model_name}/{model_name}.h5')
-
+        try:
+            # Cargar el modelo
+            model = tf.keras.models.load_model(f'Paper_models/{model_name}/{model_name}.h5')
+            
+        except:
+            if model_name == 'segnet_based_3_6':
+                model = segnet_based_3_6((1024,3), padding_value=2, name='Testeo')
+            
+            elif model_name == 'segnet_based_3_14':
+                model = segnet_based_3_14((1024,3), padding_value=2, name='Testeo')
+            
+        
         # Contar la cantidad de variables entrenables
         trainable_count = sum([tf.keras.backend.count_params(i) 
-                               for i in model.trainable_weights])
+                            for i in model.trainable_weights])
         non_trainable_count = sum([tf.keras.backend.count_params(i) 
-                                   for i in model.non_trainable_weights])
+                                for i in model.non_trainable_weights])
         
         # print(model.summary())
         print(trainable_count)
+            
+            
+        
+        
         
         
         
         
 if __name__ == '__main__':
-    # get_architecture_results()
-    get_qparams_network()
-    pass
+    get_architecture_results()
+    # get_qparams_network()

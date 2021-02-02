@@ -1815,11 +1815,4454 @@ def segnet_based_2_21(input_shape, padding_value, name=None):
     return segnet_based_1_1_all(input_shape, padding_value, name=name)
 
 
+# Comentarios
+# -----------
+# Se escoge con todas las envolventes ya que todos los resultados
+# son bastante homogéneos. Sin embargo, esta opción ofrece resultados
+# ligeramente mejores.
+
+
+
+#######     3) Análisis de canales     ####### 
+
+
+def segnet_based_3_1(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 5
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_2(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_3(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 15
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_4(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 20
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_5(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 30
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_6(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 50
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_7(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 5
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_8(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_9(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 15
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_10(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 20
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_11(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 30
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_12(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 50
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_13(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 3
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_14(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 4
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_3_15(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 5
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c ** 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c ** 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c ** 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c ** 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+# Comentarios
+# -----------
+# Nos quedamos con 10 canales en creciemiento lineal.
+
+
+
+#######     4) Análisis de skipping     ####### 
+
+
+def segnet_based_4_1(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza skipping connections con suma.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc_maxpooled = \
+            tf.keras.layers.MaxPooling1D(pool_size=2, strides=2,  padding='valid',
+                                         name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc_maxpooled, x_enc
+    
+    
+    def _decoding_layer(input_layer, input_encoder_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Aplicación de la suma de la capa encoder correspondiente
+        x_dec = tf.keras.layers.Add(name=f"Add_{layer_params['name']}")([x_dec, input_encoder_layer])
+        
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1, x_enc1_intermediate = \
+        _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2, x_enc2_intermediate = \
+        _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3, x_enc3_intermediate = \
+        _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4, x_enc4_intermediate = \
+        _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, x_enc4_intermediate, n_layers_conv=3, 
+                             layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, x_enc3_intermediate,
+                             n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, x_enc2_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, x_enc1_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_4_2(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza skipping connections con suma.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc_maxpooled = \
+            tf.keras.layers.MaxPooling1D(pool_size=2, strides=2,  padding='valid',
+                                         name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc_maxpooled, x_enc
+    
+    
+    def _decoding_layer(input_layer, input_encoder_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+
+        # Aplicación de la suma de la capa encoder correspondiente
+        x_dec = tf.keras.layers.Add(name=f"Add_{layer_params['name']}")([x_dec, input_encoder_layer])
+                
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 13
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1, x_enc1_intermediate = \
+        _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2, x_enc2_intermediate = \
+        _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3, x_enc3_intermediate = \
+        _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4, x_enc4_intermediate = \
+        _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, x_enc4_intermediate, n_layers_conv=3, 
+                             layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, x_enc3_intermediate,
+                             n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, x_enc2_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, x_enc1_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_4_3(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza skipping connections con suma.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc_maxpooled = \
+            tf.keras.layers.MaxPooling1D(pool_size=2, strides=2,  padding='valid',
+                                         name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc_maxpooled, x_enc
+    
+    
+    def _decoding_layer(input_layer, input_encoder_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Aplicación de la suma de la capa encoder correspondiente
+        x_dec = tf.keras.layers.Concatenate(name=f"Concatenate_{layer_params['name']}")([x_dec, input_encoder_layer])
+        
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1, x_enc1_intermediate = \
+        _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2, x_enc2_intermediate = \
+        _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3, x_enc3_intermediate = \
+        _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4, x_enc4_intermediate = \
+        _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, x_enc4_intermediate, n_layers_conv=3, 
+                             layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, x_enc3_intermediate,
+                             n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, x_enc2_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, x_enc1_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_4_4(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza skipping connections con suma.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc_maxpooled = \
+            tf.keras.layers.MaxPooling1D(pool_size=2, strides=2,  padding='valid',
+                                         name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc_maxpooled, x_enc
+    
+    
+    def _decoding_layer(input_layer, input_encoder_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+
+        # Aplicación de la suma de la capa encoder correspondiente
+        x_dec = tf.keras.layers.Concatenate(name=f"Add_{layer_params['name']}")([x_dec, 
+                                                                                 input_encoder_layer])
+                
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 13
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1, x_enc1_intermediate = \
+        _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2, x_enc2_intermediate = \
+        _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3, x_enc3_intermediate = \
+        _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4, x_enc4_intermediate = \
+        _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, x_enc4_intermediate, n_layers_conv=3, 
+                             layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, x_enc3_intermediate,
+                             n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, x_enc2_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c, 'kernel_size': 200, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, x_enc1_intermediate,
+                             n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+
+# Comentarios
+# -----------
+# Por ahora no lo voy a tomar en consideración.
+
+
+#######     5) Análisis de data augmentation     ####### 
+
+
+def segnet_based_5_x(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza skipping connections con suma.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    return segnet_based_3_2(input_shape, padding_value, name=name)
+
+
+
+# Comentarios
+# -----------
+# Por ahora no lo voy a tomar en consideración, se dejará para el final.
+
+
+
+
+#######     6) Análisis de largo de los fitros     ####### 
+
+
+def segnet_based_6_1(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 200
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_2(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 150
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_3(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 100
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_4(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 50
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_5(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 400
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l // 8, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l // 4, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l // 2, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_6(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 200
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_7(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 150
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_8(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 100
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_9(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 50
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+def segnet_based_6_10(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
+                          kernel_initializer, name):
+        '''Función auxiliar que modela las capas azules conv + batchnorm +
+        Activation ReLU para realizar el ENCODING.'''
+        # Aplicando la concatenación de capas
+        x_conv = tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, 
+                                        kernel_initializer=kernel_initializer,
+                                        padding=padding, 
+                                        name=f'Conv_{name}')(input_layer)
+        x_conv = \
+            tf.keras.layers.BatchNormalization(name=f'BatchNorm_{name}')(x_conv)
+        x_conv = \
+            tf.keras.layers.Activation('relu', name=f'Activation_{name}')(x_conv)
+
+        return x_conv
+    
+    
+    def _encoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar "n_layers_conv" capas CNN seguida de 
+        una capa de Maxpooling, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Definición de la salida de este bloque
+        x_enc = input_layer
+        
+        # Aplicando "n_layers_conv" capas convolucionales de codificación
+        for i in range(n_layers_conv):
+            x_enc = _conv_bn_act_layer(x_enc, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        # Finalmente la capa de MaxPooling
+        x_enc = tf.keras.layers.MaxPooling1D(pool_size=2, strides=2, 
+                                             padding='valid',
+                                             name=f"MaxPool_Conv_{layer_params['name']}")(x_enc)
+        return x_enc
+    
+    
+    def _decoding_layer(input_layer, n_layers_conv, layer_params):
+        '''Función auxiliar que permite modelar una capa de upsampling seguido de 
+        "n_layers_conv" capas CNN, tal como se puede ver en la figura 2 de [1].  
+        '''
+        # Capa de upsampling
+        x_dec = tf.keras.layers.UpSampling1D(size=2, name=f"Upsampling_"\
+                                                          f"{layer_params['name']}")(input_layer)
+        
+        # Aplicando "n_layers_conv" capas convolucionales de decodificación
+        for i in range(n_layers_conv):
+            x_dec = _conv_bn_act_layer(x_dec, filters=layer_params['filters'], 
+                                       kernel_size=layer_params['kernel_size'], 
+                                       padding=layer_params['padding'],
+                                       kernel_initializer=layer_params['kernel_initializer'], 
+                                       name=f"{layer_params['name']}_{i}")
+
+        return x_dec
+    
+    
+    # Definición de la entrada
+    x_in = tf.keras.Input(shape=[None, input_shape[1]], dtype='float32')
+
+    # Definición de la capa de máscara
+    x_masked = tf.keras.layers.Masking(mask_value=padding_value)(x_in)
+
+    ############        Definición de las capas convolucionales        ############
+    
+    ### Encoding ###
+    
+    # Definición del N_c base
+    N_c = 10
+    H_l = 400
+    
+    # Primera capa de encoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc1'}
+    x_enc1 = _encoding_layer(x_masked, n_layers_conv=2, layer_params=layer_params_1)
+    
+    # Segunda capa de encoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc2'}
+    x_enc2 = _encoding_layer(x_enc1, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Tercera capa de encoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc3'}
+    x_enc3 = _encoding_layer(x_enc2, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Cuarta capa de encoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'enc4'}
+    x_enc4 = _encoding_layer(x_enc3, n_layers_conv=3, layer_params=layer_params_4)
+    
+    
+    ### Decoding ###
+    
+    # Cuarta capa de salida del decoding
+    layer_params_4 = {'filters': N_c * 4, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec4'}
+    x_dec4 = _decoding_layer(x_enc4, n_layers_conv=3, layer_params=layer_params_4)
+    
+    # Tercera capa de salida del decoding
+    layer_params_3 = {'filters': N_c * 3, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec3'}
+    x_dec3 = _decoding_layer(x_dec4, n_layers_conv=3, layer_params=layer_params_3)
+    
+    # Segunda capa de salida del decoding
+    layer_params_2 = {'filters': N_c * 2, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec2'}
+    x_dec2 = _decoding_layer(x_dec3, n_layers_conv=2, layer_params=layer_params_2)
+    
+    # Primera capa de salida del decoding
+    layer_params_1 = {'filters': N_c * 1, 'kernel_size': H_l, 'padding': 'same',
+                      'kernel_initializer': 'he_normal', 'name': 'dec1'}
+    x_dec1 = _decoding_layer(x_dec2, n_layers_conv=2, layer_params=layer_params_1)
+                                       
+    
+    # Aplicando reshape
+    # x_reshaped = tf.keras.layers.Reshape((input_shape[0], input_shape[1] * 2))(x_dec1)
+    
+    # Definición de la capa de salida
+    x_out = tf.keras.layers.Dense(3, activation='softmax', kernel_initializer='he_normal',
+                                  name='softmax_out')(x_dec1)
+    
+    # Definición del modelo
+    model = tf.keras.Model(inputs=x_in, outputs=x_out, name=name)
+    
+    return model
+
+
+
+
+
 
 # Módulo de testeo
 if __name__ == '__main__':
     # Crear gráfico de la red neuronal 
-    model = segnet_based_1_1_all((128,3), padding_value=2, name='Testeo')
+    model = segnet_based_4_4((128,3), padding_value=2, name='Testeo')
     print(model.summary())
-    # tf.keras.utils.plot_model(model, to_file='Testeo.png', show_shapes=True, 
-    #                           expand_nested=True)
+    tf.keras.utils.plot_model(model, to_file='Testeo.png', show_shapes=True, 
+                              expand_nested=True)

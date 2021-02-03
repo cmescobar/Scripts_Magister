@@ -346,7 +346,7 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
 ###############       Definición de parámetros       ###############
 
 # Definición de la GPU con la que se trabajará
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 # Carpeta a guardar
 filepath_to_save = 'Paper_models'
@@ -373,7 +373,7 @@ bp_parameters = [20, 30, 180, 190]
 validation_split = 0.1
 batch_size = 70
 epochs = 20
-model_name = 'segnet_based_6_2'
+model_name = 'segnet_based_6_10'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
@@ -1760,7 +1760,7 @@ elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Mo
                     'segnet_based_5_6', 'segnet_based_5_7', 'segnet_based_6_1',
                     'segnet_based_6_2', 'segnet_based_6_3', 'segnet_based_6_4',
                     'segnet_based_6_5', 'segnet_based_6_6', 'segnet_based_6_7',
-                    'segnet_based_6_8', 'segnet_based_6_9', 'segnet_based_6_19',]:
+                    'segnet_based_6_8', 'segnet_based_6_9', 'segnet_based_6_10',]:
     loss_model = loss_func
 
 # Compilando las opciones

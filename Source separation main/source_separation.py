@@ -849,7 +849,8 @@ def get_components_HR_sounds(filepath, samplerate_des, sep_type='to all', assign
                              f2_roll=150, measure_temp_crit='q_equal', H_binary=True, 
                              reduce_to_H=False, dec_criteria='or', version=2, only_centroid=False):
     '''Función que permite generar los archivos de audio de las componentes separadas
-    mediante el proceso de NMF.
+    mediante el proceso de NMF. Encapsula las funciones 'to all', 'on segments' y 
+    'masked segments'
     
     Parameters
     ----------
@@ -3126,7 +3127,12 @@ def _no_masking(signal_in, W, H, S, k, N, noverlap, padding, repeat, window, who
     return components, Y_list
 
 
-# Module testing
+
+
+# Módulo de testeo
+if __name__ == '__main__':
+    pass
+
 '''
 filepath = 'Database_manufacturing/db_HR/Source Separation/Seed-0 - x - 1_Heart 1_Resp 0_White noise'
 dir_file = f'{filepath}/HR 122_2b2_Al_mc_LittC2SE Seed[2732]_S1[59]_S2[60].wav'

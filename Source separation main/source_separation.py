@@ -2077,7 +2077,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             savefig = f'{filepath_comps_id}/{audio_name.strip(".wav")}'
             
             # Ploteando las diferencias
-            fig, ax = plt.subplots(2, 1, figsize=(15,7))
+            fig, ax = plt.subplots(2, 1, figsize=(15,5))
             
             ax[0].plot(audio_resp_norm, label='Original', linewidth=4)
             ax[0].plot(resp_comp_norm, label='Componente resp', linewidth=1)
@@ -2108,7 +2108,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             table_error.set_fontsize(7)
                         
             fig.suptitle(f'{audio_name} Respiratory Normalized')
-            fig.savefig(f'{savefig}/Resp.png')
+            fig.savefig(f'{savefig}/Resp.pdf', transparent=True)
             
             if plot_show:
                 # Manager para modificar la figura actual y maximizarla
@@ -2119,7 +2119,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             
             plt.close()
             
-            fig, ax = plt.subplots(2, 1, figsize=(15,7))
+            fig, ax = plt.subplots(2, 1, figsize=(15,5))
             
             ax[0].plot(audio_heart_norm, label='Original', linewidth=4)
             ax[0].plot(heart_comp_norm, label='Componente heart', linewidth=1)
@@ -2150,7 +2150,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             table_error.set_fontsize(7)
             
             fig.suptitle(f'{audio_name} Heart Normalized')
-            fig.savefig(f'{savefig}/Heart.png')
+            fig.savefig(f'{savefig}/Heart.pdf', transparent=True)
             
             if plot_show:
                 # Manager para modificar la figura actual y maximizarla
@@ -2162,7 +2162,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             plt.close()
             
             # Ploteando las diferencias
-            fig, ax = plt.subplots(2, 1, figsize=(15,7))
+            fig, ax = plt.subplots(2, 1, figsize=(15,5))
             
             # Definición de los coeficientes a ponderar para esta base
             name_info = filepath.split('/')[-1].split(' ')
@@ -2206,7 +2206,7 @@ def comparison_components_nmf_ground_truth(filepath, sep_type='to all', plot_sig
             table_error.set_fontsize(7)
             
             fig.suptitle(f'{audio_name} Sum comparation')
-            fig.savefig(f'{savefig}/Sum comps.png')
+            fig.savefig(f'{savefig}/Sum comps.pdf', transparent=True)
             
             if plot_show:
                 # Manager para modificar la figura actual y maximizarla
@@ -2356,18 +2356,18 @@ def _plot_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assign_metho
     plt.switch_backend('TkAgg')
     
     # Creación del plot
-    fig, ax = plt.subplots(2, 2, figsize=(17,10))
+    fig, ax = plt.subplots(2, 2, figsize=(15,10))
     
     # Plots
     ax[0][0].plot(signal_in, label='Original')
     ax[0][0].legend(loc='upper right')
-    ax[0][0].set_title('Original signal')
+    ax[0][0].set_ylabel('Original signal')
     ax[0][0].set_xlabel('Samples')
     
     ax[1][0].plot(comps[0], label='Comp 1', color='C0')
     ax[1][0].plot(comps[1], label='Comp 2', color='C1')
     ax[1][0].legend(loc='upper right')
-    ax[1][0].set_title('NMF components')
+    ax[1][0].set_ylabel('NMF components')
     ax[1][0].set_xlabel('Samples')
     
     f = np.linspace(0, samplerate // 2, W.shape[0])
@@ -2375,21 +2375,21 @@ def _plot_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assign_metho
     ax[0][1].plot(f, W[:,1], label='Comp 2', color='C1')
     ax[0][1].legend(loc='upper right')
     ax[0][1].set_xlim([0,1000])
-    ax[0][1].set_title('Matrix W')
+    ax[0][1].set_ylabel('Matrix W')
     ax[0][1].set_xlabel('Frequency [Hz]')
     
     t = np.linspace(0, len(signal_in), H.shape[1])
     ax[1][1].plot(t, H[0], label='Comp 1', color='C0')
     ax[1][1].plot(t, H[1], label='Comp 2', color='C1')
     ax[1][1].legend(loc='upper right')
-    ax[1][1].set_title('Matrix H')
+    ax[1][1].set_ylabel('Matrix H')
     ax[1][1].set_xlabel('Samples')
     
     # Definición del título
     # fig.suptitle(f'NMF decomposition')
     
     # Se guarda la figura
-    fig.savefig(f'{filepath_to_save}/Signal plot.png') 
+    fig.savefig(f'{filepath_to_save}/Signal plot.pdf', transparent=True) 
     
     if assign_method == 'manual':
         # Manager para modificar la figura actual y maximizarla
@@ -2463,7 +2463,7 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
     plt.switch_backend('TkAgg')
     
     # Creación del plot
-    fig, ax = plt.subplots(1, 3, figsize=(17,7))
+    fig, ax = plt.subplots(1, 3, figsize=(12,7))
     
     # Plots
     t = np.linspace(lower - N_fade, upper + N_fade, len(comps[0]))
@@ -2495,7 +2495,7 @@ def _plot_segments_nmf(signal_in, samplerate, comps, W, H, N_fade, lower, upper,
     fig.suptitle(f'Segment #{num}')
     
     # Se guarda la figura
-    fig.savefig(f'{filepath_to_save}/Segment {num}.png') 
+    fig.savefig(f'{filepath_to_save}/Segment {num}.pdf', transparent=True) 
     
     if assign_method == 'manual':
         # Manager para modificar la figura actual y maximizarla
@@ -2546,7 +2546,7 @@ def _plot_segments_nmf_kmore(signal_in, heart_comps, resp_comps, N_fade,
     "nmf_applied_interest_segments".
     '''
     # Creación de la figura
-    plt.figure(figsize=(17,9))
+    plt.figure(figsize=(15,5))
     
      # Graficando cada segmento de la señal
     plt.plot(range(lower - N_fade, upper + N_fade), 
@@ -2562,7 +2562,7 @@ def _plot_segments_nmf_kmore(signal_in, heart_comps, resp_comps, N_fade,
     plt.ylabel('Signals')
     plt.legend(loc='upper right')
     plt.suptitle(f'Segment #{num}')
-    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.png')
+    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.pdf', transparent=True)
     plt.close()
 
 
@@ -2597,18 +2597,18 @@ def _plot_masked_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assig
     plt.switch_backend('TkAgg')
     
     # Creación del plot
-    fig, ax = plt.subplots(2, 2, figsize=(17,10))
+    fig, ax = plt.subplots(2, 2, figsize=(15,10))
     
     # Plots
     ax[0][0].plot(signal_in, label='Original')
     ax[0][0].legend(loc='upper right')
-    ax[0][0].set_title('Original signal')
+    ax[0][0].set_ylabel('Original signal')
     ax[0][0].set_xlabel('Samples')
     
     ax[1][0].plot(comps[0], label='Comp 1', color='C0')
     ax[1][0].plot(comps[1], label='Comp 2', color='C1')
     ax[1][0].legend(loc='upper right')
-    ax[1][0].set_title('NMF components')
+    ax[1][0].set_ylabel('NMF components')
     ax[1][0].set_xlabel('Samples')
     
     f = np.linspace(0, samplerate // 2, W.shape[0])
@@ -2616,21 +2616,21 @@ def _plot_masked_nmf(signal_in, samplerate, comps, W, H, filepath_to_save, assig
     ax[0][1].plot(f, W[:,1], label='Comp 2', color='C1')
     ax[0][1].legend(loc='upper right')
     ax[0][1].set_xlim([0,1000])
-    ax[0][1].set_title('Matrix W')
+    ax[0][1].set_ylabel('Matrix W')
     ax[0][1].set_xlabel('Frequency [Hz]')
     
     t = np.linspace(0, len(signal_in), H.shape[1])
     ax[1][1].plot(t, H[0], label='Comp 1', color='C0')
     ax[1][1].plot(t, H[1], label='Comp 2', color='C1')
     ax[1][1].legend(loc='upper right')
-    ax[1][1].set_title('Matrix H')
+    ax[1][1].set_ylabel('Matrix H')
     ax[1][1].set_xlabel('Samples')
     
     # Definición del título
     # fig.suptitle(f'Signal plots')
     
     # Se guarda la figura
-    fig.savefig(f'{filepath_to_save}/Signal plot.png') 
+    fig.savefig(f'{filepath_to_save}/Signal plot.pdf', transparent=True) 
     
     if assign_method == 'manual':
         # Manager para modificar la figura actual y maximizarla
@@ -2678,7 +2678,7 @@ def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision,
     función "nmf_applied_masked_segments".
     '''
     # Creación de la figura
-    plt.figure(figsize=(17,9))
+    plt.figure(figsize=(15,5))
     
      # Graficando cada segmento de la señal
     plt.plot(range(lower - N_fade, upper + N_fade), 
@@ -2696,7 +2696,7 @@ def _plot_masked_segments_nmf(signal_in, comps, heart_decision, resp_decision,
     plt.ylabel('Señales')
     plt.legend(loc='upper right')
     plt.suptitle(f'Segment #{num}')
-    plt.savefig(f'{filepath_to_save}/Segment #{num}.png')
+    plt.savefig(f'{filepath_to_save}/Segment #{num}.pdf', transparent=True)
     plt.close()
 
 
@@ -2706,7 +2706,7 @@ def _plot_masked_segments_nmf_kmore(signal_in, heart_comps, resp_comps, lower, u
     función "nmf_applied_masked_segments" cuando k >= 2.
     '''
     # Creación de la figura
-    plt.figure(figsize=(17,9))
+    plt.figure(figsize=(15,5))
     
      # Graficando cada segmento de la señal
     plt.plot(range(lower - N_fade, upper + N_fade), 
@@ -2724,7 +2724,7 @@ def _plot_masked_segments_nmf_kmore(signal_in, heart_comps, resp_comps, lower, u
     plt.ylabel('Signals')
     plt.legend(loc='upper right')
     plt.suptitle(f'Segment #{num}')
-    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.png')
+    plt.savefig(f'{filepath_to_save}/Segment #{num} clustering.pdf', transparent=True)
     plt.close()
 
 

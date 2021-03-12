@@ -322,7 +322,11 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
                                               W_0=None, H_0=None, scale='abs')
         
         # Algoritmo de clasificación
-        
+        resp_comps, heart_comps = \
+            _clustering_criteria_segments(signal_in, samplerate, W=W, H=H, comps=comps, 
+                                          lower=lower, upper=upper, 
+                                          interval_list=interval_list, N_fade=N_fade, 
+                                          N_lax=N_lax, dec_criteria=dec_criteria)
                 
         
         # Definición de la lista de señales a concatenar con fading para el corazón
@@ -335,7 +339,6 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
         heart_signal = fade_connect_signals(heart_connect, N=N_fade, beta=1)
         resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
            
-        
     return resp_signal, heart_signal
 
 

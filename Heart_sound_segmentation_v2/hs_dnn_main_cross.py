@@ -29,7 +29,7 @@ from paper_DNN_models import cnn_dnn_1_1, cnn_dnn_1_2, segnet_based_1_1, segnet_
     segnet_based_7_1, segnet_based_7_2, segnet_based_7_3, segnet_based_7_4, segnet_based_7_5, \
     segnet_based_7_6, segnet_based_7_7, segnet_based_7_8, segnet_based_7_9, segnet_based_7_10, \
     segnet_based_8_x, segnet_based_9_x, segnet_based_10_1, segnet_based_10_2, segnet_based_11_1, \
-    segnet_based_11_2, segnet_based_12_x
+    segnet_based_11_2, segnet_based_12_x, definitive_segnet_based
 from heart_sound_physionet_management import get_model_data, get_model_data_idxs, \
     get_model_data_idxs_2, get_training_weights
 
@@ -110,7 +110,7 @@ def model_train_iteration(model, model_name, index_list, epoch_train):
                       'segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
                       'segnet_based_12_4', 'segnet_based_12_5', 'segnet_based_12_6',
                       'segnet_based_12_7', 'segnet_based_12_8', 'segnet_based_12_9',
-                      'segnet_based_12_10']:
+                      'segnet_based_12_10', 'definitive_segnet_based']:
         print('\nTraining time\n------------\n')
         # Definición de las etiquetas de entrenamiento
         y1 = Y_train[:, :, 0]
@@ -351,7 +351,7 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
                       'segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
                       'segnet_based_12_4', 'segnet_based_12_5', 'segnet_based_12_6',
                       'segnet_based_12_7', 'segnet_based_12_8', 'segnet_based_12_9',
-                      'segnet_based_12_10']:
+                      'segnet_based_12_10', 'definitive_segnet_based']:
         print(to_print)
         # Definición de las etiquetas de testeo
         y1 = Y_data[:, :, 0]
@@ -504,7 +504,7 @@ bp_parameters = [20, 30, 180, 190]
 validation_split = 0.1
 batch_size = 70
 epochs = 20
-model_name = 'segnet_based_12_10'
+model_name = 'definitive_segnet_based'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
@@ -1573,6 +1573,35 @@ elif model_name in ['segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3
     append_fft = False
 
 
+elif model_name in ['definitive_segnet_based']:
+    # Definición de las ventanas a revisar
+    N = 8192 * 2
+    step = 128
+    activation_percentage = None
+    
+    # Data augmentation
+    snr_list = [-1, 0, 1, 5]
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
+                    'inst_phase': False, 'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
+    multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [3,4], 'start_level': 0, 'end_level': 4}
+    spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
+                        'noverlap': N_env_spec - step_env_spec, 
+                        'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
 
 ###############       Definición de parámetros       ###############
 
@@ -1604,6 +1633,13 @@ if model_name in ['segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
     test_list = np.array(test_list)
     val_list = np.array(val_list)
 
+elif model_name in ['definitive_segnet_based']:
+    # Archivos en la carpeta de datos
+    files = [i for i in os.listdir(db_folder) if i.endswith('.wav')]
+    
+    train_list = np.arange(len(files)) + 1
+    test_list = None
+
 else:
     with open('Database_separation.txt', 'r', encoding='utf8') as file:
         # Lectura del diccionario
@@ -1613,8 +1649,7 @@ else:
         train_list = np.array(dict_to_rev['train_indexes'])
         val_list = np.array(dict_to_rev['val_indexes'])
         test_list = np.array(dict_to_rev['test_indexes'])
-
-
+        
 
 ### Checkeo de versiones ###
 for filename in os.listdir(f'{filepath_to_save}/'):
@@ -2195,6 +2230,9 @@ elif model_name in ['segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3
     model = segnet_based_12_x(input_shape=(X_train.shape[1], X_train.shape[2]),
                               padding_value=padding_value, name=model_name)  
 
+elif model_name in ['definitive_segnet_based']:
+    model = definitive_segnet_based(input_shape=(X_train.shape[1], X_train.shape[2]),
+                                    padding_value=padding_value, name=model_name)
 
 
 # Compilando las opciones del modelo
@@ -2250,7 +2288,7 @@ elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Mo
                     'segnet_based_11_2', 'segnet_based_12_1', 'segnet_based_12_2', 
                     'segnet_based_12_3', 'segnet_based_12_4', 'segnet_based_12_5', 
                     'segnet_based_12_6', 'segnet_based_12_7', 'segnet_based_12_8', 
-                    'segnet_based_12_9', 'segnet_based_12_10']:
+                    'segnet_based_12_9', 'segnet_based_12_10', 'definitive_segnet_based']:
     loss_model = loss_func
 
 
@@ -2305,7 +2343,7 @@ for epoch in range(epochs):
     if model_name not in ['segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
                           'segnet_based_12_4', 'segnet_based_12_5', 'segnet_based_12_6',
                           'segnet_based_12_7', 'segnet_based_12_8', 'segnet_based_12_9',
-                          'segnet_based_12_10']:
+                          'segnet_based_12_10', 'definitive_segnet_based']:
         model_bigbatch_evaluation(model, model_name, index_list=val_list, epoch=epoch, 
                                   type_op='val')
 
@@ -2317,6 +2355,8 @@ for epoch in range(epochs):
 
 
 ############# Testeando #############
-
-model_bigbatch_evaluation(model, model_name, index_list=test_list, epoch=epoch, 
-                          type_op='test')
+if model_name not in ['definitive_segnet_based']:
+    model_bigbatch_evaluation(model, model_name, index_list=test_list, epoch=epoch, 
+                            type_op='test')
+else:
+    print("\n¡Felicidades! Su red está completa.\n")

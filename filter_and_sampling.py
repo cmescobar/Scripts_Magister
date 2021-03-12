@@ -834,9 +834,6 @@ def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
         num, den = signal.iirdesign(wp=freq_pass / (samplerate/2),
                                     ws=freq_stop / (samplerate/2),
                                     gpass=gpass, gstop=gstop)
-        # Se define de facto el padding en None ya que es solo una función para
-        # filtros FIR
-        gp_padding = None
         
         # Se define correct_by_gd en False ya que no se utilizará en algún caso
         correct_by_gd = False
@@ -850,10 +847,6 @@ def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
         
         # Se define no plotear dado que no hay filtro (independiente de la entrada)
         plot_filter = False
-        
-        # Se define de facto el padding en None ya que es solo una función para
-        # filtros FIR
-        gp_padding = None
         
         # Se define correct_by_gd en False ya que no se utilizará en algún caso
         correct_by_gd = False
@@ -1151,9 +1144,6 @@ def highpass_filter(signal_in, samplerate, freq_stop, freq_pass,
         num, den = signal.iirdesign(wp=freq_pass / (samplerate/2),
                                     ws=freq_stop / (samplerate/2),
                                     gpass=gpass, gstop=gstop)
-        # Se define de facto el padding en None ya que es solo una función para
-        # filtros FIR
-        gp_padding = None
         
         # Se define correct_by_gd en False ya que no se utilizará en algún caso
         correct_by_gd = False
@@ -1429,29 +1419,31 @@ def bandpass_filter(signal_in, samplerate, freq_stop_1, freq_pass_1,
         return signal_bp
 
 
+
 # Testing module
-'''import soundfile as sf
+if __name__ == '__main__':
+    import soundfile as sf
 
-filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'
-audio, samplerate = sf.read(f'{filename}.wav')
-new_rate, dwns_signal = downsampling_signal(audio, samplerate, 950, 1000, 
-                                            method='lowpass', lp_method='fir', 
-                                            fir_method='kaiser', gpass=1, gstop=80,
-                                            correct_by_gd=True, gd_padding='periodic',
-                                            plot_filter=False, normalize=True)
+    filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'
+    audio, samplerate = sf.read(f'{filename}.wav')
+    new_rate, dwns_signal = downsampling_signal(audio, samplerate, 950, 1000, 
+                                                method='lowpass', lp_method='fir', 
+                                                fir_method='kaiser', gpass=1, gstop=80,
+                                                correct_by_gd=True, gd_padding='periodic',
+                                                plot_filter=False, normalize=True)
 
-restored_signal = upsampling_signal(dwns_signal, new_rate, samplerate,
-                                    N_desired=None, resample_method='interp1d',
-                                    stret_method='lowpass', lp_method='fir', 
-                                    fir_method='kaiser', trans_width=50, gpass=1, gstop=80, 
-                                    correct_by_gd=True, gd_padding='periodic',
-                                    plot_filter=False, plot_signals=False,
-                                    normalize=True)
+    restored_signal = upsampling_signal(dwns_signal, new_rate, samplerate,
+                                        N_desired=None, resample_method='interp1d',
+                                        stret_method='lowpass', lp_method='fir', 
+                                        fir_method='kaiser', trans_width=50, gpass=1, gstop=80, 
+                                        correct_by_gd=True, gd_padding='periodic',
+                                        plot_filter=False, plot_signals=False,
+                                        normalize=True)
 
-print(len(audio))
-print(len(dwns_signal))
-print(len(restored_signal))
+    print(len(audio))
+    print(len(dwns_signal))
+    print(len(restored_signal))
 
-plt.plot(np.linspace(0, len(audio), len(audio)), audio)
-plt.plot(np.linspace(0, len(audio), len(restored_signal)), restored_signal)
-plt.show()'''
+    plt.plot(np.linspace(0, len(audio), len(audio)), audio)
+    plt.plot(np.linspace(0, len(audio), len(restored_signal)), restored_signal)
+    plt.show()

@@ -1,0 +1,83 @@
+# Datos de ingreso
+host: rfc2.ing.puc.cl
+user: geduran
+pass: gabrielcita
+
+# Para enviar archivos
+scp <path original> geduran@rfc2.ing.puc.cl:/home/geduran/<path destino>         # Es posible cambiar estas direcciones
+
+# Para enviar carpetas completas
+scp -r <path original> geduran@rfc2.ing.puc.cl:/home/geduran/<path destino>      # Es posible cambiar estas direcciones
+
+# Para descargar archivos archivos
+scp geduran@rfc2.ing.puc.cl:/home/geduran/<path origen> <path destino>         	 # Es posible cambiar estas direcciones
+
+# Funcionan con comandos ubuntu
+
+# Cómo crear un entorno de trabajo (no es necesario volver a hacerlo)
+virtualenv <nombre del entorno> --python=python3
+
+# Cómo activar el entorno
+source <nombre del entorno>/bin/activate
+
+# Para desactivar, es necesario ingresar "deactivate"
+
+
+
+# Para seleccionar la tarjeta gráfica con la que se correrá el programa
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
+# Es posible usar screen para que hacer una sesión que no muera cuando se cierra PuTTy
+screen
+
+# Para reabrir una sesión
+screen -r <id_sesion>
+
+# Para ver el id de la sesión
+screen -ls
+
+# Los comandos de screen se introducen con
+ctrl+a <comando a introducir que en general es una tecla>
+
+# Para ver qué unidades se están utilizando
+nvtop
+
+# Para re abrir una sesión que me expulsa
+screen -r -d <número de la sesión>
+
+
+
+
+
+######################## 		Comandos scp que he ejecutado 		########################
+scp -r "PhysioNet 2016 CINC Heart Sound Database" geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp Acceso_Remoto.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp descriptor_functions.py envelope_functions.py file_management.py filter_and_sampling.py heart_sound_DNN_models.py heart_sound_physionet_management.py hs_dnn_main.py math_functions.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp hs_dnn_main.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Models/Model_2.h5 Model_2.txt
+scp geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Models/Model_2.txt .
+scp Model_2-get_model_data_params.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/
+scp hs_dnn_main.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Models/Model_5_1.h5 .
+scp hs_dnn_main_2.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Model_5_2_8-get_model_data_params.txt /home/geduran/cmescobar/Models/Model_5_2_8.txt /home/geduran/cmescobar/Models/Model_5_2_8.h5" .
+scp envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_2.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Model_5_2_9-get_model_data_params.txt /home/geduran/cmescobar/Models/Model_5_2_9.txt /home/geduran/cmescobar/Models/Model_5_2_9.h5 /home/geduran/cmescobar/Models/Model_5_2_9_db.txt" .
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_3.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Model_6_2-get_model_data_params.txt /home/geduran/cmescobar/Models/Model_6_2.txt /home/geduran/cmescobar/Models/Model_6_2.h5 /home/geduran/cmescobar/Models/Model_6_2_db.txt" .
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_4.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Model_5_2_4_3_pro_total-get_model_data_params.txt /home/geduran/cmescobar/Models/Model_5_2_4_3_pro_total.txt /home/geduran/cmescobar/Models/Model_5_2_4_3_pro_total.h5 /home/geduran/cmescobar/Models/Model_5_2_4_3_pro_total_db.txt" .
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_5.py heart_sound_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Model_8_3_pro_total_augmented-get_model_data_params.txt /home/geduran/cmescobar/Models/Model_8_3_pro_total_augmented.txt /home/geduran/cmescobar/Models/Model_8_3_pro_total_augmented.h5 /home/geduran/cmescobar/Models/Model_8_3_pro_total_augmented_db.txt" .
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Models/Last_model_reg.txt" .
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_6.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_2_21-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_2_21.txt /home/geduran/cmescobar/Paper_models/segnet_based_2_21.h5 /home/geduran/cmescobar/Paper_models/segnet_based_2_21_db.txt" ./Paper_models/segnet_based_2_21
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/cnn_dnn_1_3-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/cnn_dnn_1_3.txt /home/geduran/cmescobar/Paper_models/cnn_dnn_1_3.h5 /home/geduran/cmescobar/Paper_models/cnn_dnn_1_3_db.txt" ./Paper_models/cnn_dnn_1_3
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_7.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp Database_separation.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_1_4_all-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all.txt /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all.h5 /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all_db.txt" ./Paper_models/segnet_based_1_4_all
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_12_10-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_12_10.txt /home/geduran/cmescobar/Paper_models/segnet_based_12_10.h5 /home/geduran/cmescobar/Paper_models/segnet_based_12_10_db.txt" ./Paper_models/segnet_based_12_10
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_8.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_cross.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/definitive_segnet_based-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.h5 /home/geduran/cmescobar/Paper_models/definitive_segnet_based_db.txt" ./Paper_models/definitive_segnet_based

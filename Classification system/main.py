@@ -2,8 +2,9 @@ import os
 import matplotlib.pyplot as plt
 from heart_sound_segmentation.filter_and_sampling import downsampling_signal
 from heart_sound_segmentation.evaluation_functions import eval_sound_model
-from utils import signal_segmentation_db, find_and_open_audio, signal_segmentation
-from source_separation.source_separation import nmf_applied_masked_segments
+from utils import signal_segmentation_db, find_and_open_audio, signal_segmentation,\
+    find_segments_limits
+from source_separation.nmf_decompositions import nmf_masked_segments
 from testing_functions import test_hss
 
 
@@ -48,7 +49,7 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
     new_rate, audio_dwns = downsampling_signal(audio, samplerate, 
                                                samplerate_des//2-100, 
                                                samplerate_des//2)
-        
+    
     # Obteniendo la salida de la red
     _, y_hat_to, (y_out2, _, _) = \
             signal_segmentation(audio, samplerate, model_name,
@@ -56,6 +57,9 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
                                 lowpass_params=lowpass_params,
                                 plot_outputs=False)
 
+    # Definiendo los intervalos para realizar la separación de fuentes
+    interval_list = find_segments_limits(y_out2)
+    
     # Aplicando la separación de fuentes
     
     
@@ -78,7 +82,7 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
 
 if __name__ == '__main__':
     # Definición de la función a revisar
-    test_func = 'test_hss'
+    test_func = 'preprocessing_audio'
     
     if test_func == 'test_hss':
         test_hss()
@@ -96,6 +100,6 @@ if __name__ == '__main__':
         # Aplicando la rutina
         preprocessing_audio(model_name, lowpass_params, symptom=symptom, 
                             ausc_pos=ausc_pos, priority=priority,
-                            plot_segmentation=True)
+                            plot_segmentation=False)
 
 

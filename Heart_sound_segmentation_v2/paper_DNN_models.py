@@ -8585,6 +8585,31 @@ def segnet_based_12_x(input_shape, padding_value, name=None):
 
 
 
+#######     13) Red definitiva     ####### 
+
+
+def definitive_segnet_based(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Todas
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    return segnet_based_8_x(input_shape, padding_value, name=name)
 
 
 

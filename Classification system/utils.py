@@ -213,7 +213,16 @@ def signal_segmentation(signal_in, samplerate, model_name,
             segments_redimension(y_hat[0, :, i], 
                                  length_desired=length_desired_to,
                                  kind='cubic')
+        
+    # Definiendo la cantidad de puntos finales a añadir
+    q_times = length_desired - y_hat_to.shape[1]
     
+    # Generando los puntos a añadir
+    points_to_add = np.tile(y_hat_to[:,-1,:], (1, q_times, 1))
+    
+    # Agregando los puntos a la señal
+    y_hat_to = np.concatenate((y_hat_to, points_to_add), axis=1)
+        
     # Representación en clases
     y_out2, y_out3, y_out4 = \
         class_representations(y_hat_to, plot_outputs=plot_outputs,
@@ -252,6 +261,41 @@ def segments_redimension(signal_in, length_desired, kind='linear'):
         
     # Interpolando finalmente
     return f(x_new)
+
+
+def find_segments_limits(y_hat):
+    '''Función que obtiene los límites de las posiciones de los sonidos
+    cardiacos a partir de la señal binaria indica su presencia.
+    
+    Parameters
+    ----------
+    y_hat : ndarray
+        Señal binaria que indica la presencia de sonidos cardiacos.
+    
+    Returns
+    -------
+    interval_list : list
+        Lista de intervalos en los que se encuentra el sonido cardiaco.
+    '''
+    # Encontrando los puntos de cada sonido
+    hss_pos = np.where(y_hat == 0)[0]
+    
+    # Definición de la lista de intervalos
+    interval_list = list()
+    
+    # Inicio del intervalo
+    beg_seg = hss_pos[0]
+    
+    # Definiendo 
+    for i in range(len(hss_pos) - 1):
+        if hss_pos[i + 1] - hss_pos[i] != 1:
+            interval_list.append([beg_seg, hss_pos[i]])
+            beg_seg = hss_pos[i + 1]
+
+    if hss_pos[-1] > beg_seg:
+        interval_list.append([beg_seg, hss_pos[-1]])
+        
+    return interval_list
 
 
 

@@ -90,23 +90,25 @@ def fade_connect_signals(signal_list, N, beta=1):
     return signal_faded
 
 
-# Test module
-'''import soundfile as sf
-import matplotlib.pyplot as plt
-filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'
-audio, samplerate = sf.read(f'{filename}.wav')
-import time
 
-N = 50
-audio_left = audio[1000:1500]
-audio_center = audio[1500-N:2000+N]
-audio_right = audio[2000:2500]
+# Módulo de testeo
+if __name__ == '__main__':
+    import soundfile as sf
+    import matplotlib.pyplot as plt
+    filename = 'Interest_Audios/Heart_sound_files/Level 4/136_1b1_Ar_sc_Meditron'
+    audio, samplerate = sf.read(f'{filename}.wav')
+    import time
 
-a = fade_connect_signals([audio_left, audio_center, audio_right], N, beta=1)
+    N = 50
+    audio_left = audio[1000:1500]
+    audio_center = audio[1500-N:2000+N]
+    audio_right = audio[2000:2500]
 
-plt.plot(range(1000, 2500), a, linewidth=3, label='Original')
-plt.plot(range(1000, 1500), audio_left, label='left')
-plt.plot(range(1500-N, 2000+N), audio_center, label='center')
-plt.plot(range(2000, 2500), audio_right, label='right')
-plt.legend()
-plt.show()'''
+    a = fade_connect_signals([audio_left, audio_center, audio_right], N, beta=1)
+
+    plt.plot(range(1000, 2500), a, linewidth=3, label='Original')
+    plt.plot(range(1000, 1500), audio_left, label='left')
+    plt.plot(range(1500-N, 2000+N), audio_center, label='center')
+    plt.plot(range(2000, 2500), audio_right, label='right')
+    plt.legend()
+    plt.show()

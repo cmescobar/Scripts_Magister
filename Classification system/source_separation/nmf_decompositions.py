@@ -8,9 +8,10 @@ from source_separation.clustering_functions import spectral_correlation_test, \
     spectral_correlation_test, energy_percentage_test, temporal_correlation_test,\
     temporal_correlation_test_segment, machine_learning_clustering
 
+
 def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=1024, 
                       iter_prom=1, padding=0, repeat=0, window='hann', whole=False, 
-                      alpha_wiener=1, filter_out='wiener', init='random', solver='cd', 
+                      alpha_wiener=1, filter_out='wiener', init='random', solver='mu', 
                       beta=2, tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                       random_state=None, W_0=None, H_0=None, same_outshape=True,
                       plot_spectrogram=False, scale='abs', db_basys=1e-15):
@@ -56,7 +57,7 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=10
         azar, y 'custom' permite ingresar matrices en "W_0" y "H_0" como puntos iniciales.
         Por defecto es 'random'.
     solver : {'cd', 'mu'}, optional
-        Solver numérico a usar. Por defecto es 'cd'.
+        Solver numérico a usar. Por defecto es 'mu'.
     beta : {'frobenius', 'kullback-leibler', 'itakura-saito'}, float or string, optional
         Definición de la beta divergencia. Por defecto es 'frobenius' (o 2).
     tol: float, optional
@@ -191,13 +192,17 @@ def nmf_decomposition(signal_in, samplerate, n_components=2, N=2048, noverlap=10
 
 def nmf_to_all(signal_in, samplerate, hs_pos, interval_list, n_components=2, N=1024, N_lax=100, 
                noverlap=768, repeat=0, padding=0, window='hamming', init='random', 
-               solver='cd', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0, 
+               solver='mu', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0, 
                random_state=0, dec_criteria='vote'):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
     ubicación en el ordenador), la cual descompone toda la señal.
     
     Parameters
     ----------
+    signal_in : ndarray or list
+        Señal a descomponer.
+    samplerate : int
+        Tasa de muestreo de la señal.
     n_components : int, optional
         Cantidad de componentes a separar la señal. Por defecto es 2.
     N : int, optional
@@ -249,7 +254,7 @@ def nmf_to_all(signal_in, samplerate, hs_pos, interval_list, n_components=2, N=1
 def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2, 
                     N=1024, N_lax=100, N_fade=100, noverlap=768, padding=0,
                     repeat=0, window='hamming', alpha_wiener=1, init='random', 
-                    solver='cd', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, 
+                    solver='mu', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, 
                     l1_ratio=0, random_state=0, dec_criteria='vote'):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
     ubicación en el ordenador), la cual solamente descompone los segmentos de interés
@@ -257,12 +262,10 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
     
     Parameters
     ----------
-    dir_file : str
-        Dirección del archivo de audio a segmentar.
-    assign_method : {'auto', 'manual'}, optional
-        Método de separación de sonidos. Para 'auto', se utiliza una lista de etiquetas
-        creadas manualmente. Para 'manual' se etiqueta segmento a segmento cada componente, 
-        las cuales son guardadas en un archivo .txt. Por defecto es 'manual'.
+    signal_in : ndarray or list
+        Señal a descomponer.
+    samplerate : int
+        Tasa de muestreo de la señal.
     n_components : int, optional
         Cantidad de componentes a separar la señal. Por defecto es 2.
     N : int, optional
@@ -344,7 +347,7 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
 
 def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_components=2, 
                         N=1024, N_lax=100, N_fade=100, noverlap=768, padding=0,
-                        repeat=0, window='hamming', init='random', solver='cd', beta=1,
+                        repeat=0, window='hamming', init='random', solver='mu', beta=1,
                         tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                         random_state=0, dec_criteria='vote'):
     '''Función que permite obtener la descomposición NMF de una señal (ingresando su
@@ -353,6 +356,10 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
     
     Parameters
     ----------
+    signal_in : ndarray or list
+        Señal a descomponer.
+    samplerate : int
+        Tasa de muestreo de la señal.
     n_components : int, optional
         Cantidad de componentes a separar la señal. Por defecto es 2.
     N : int, optional
@@ -402,7 +409,7 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
         
         # Agregando los valores de la señal a descomponer
         to_decompose_faded = \
-                fading_signal(signal_to[lower - N_fade:upper + N_fade],
+                fading_signal(signal_in[lower - N_fade:upper + N_fade],
                               N_fade, beta=1, side='both')
         
         # Definiendo el segmento
@@ -420,7 +427,7 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
                                   max_iter=max_iter, alpha_nmf=alpha_nmf, 
                                   l1_ratio=l1_ratio, random_state=random_state,
                                   W_0=None, H_0=None, scale='abs')
-
+    
     # Algoritmos de clasificación
     resp_comps, heart_comps = \
             _clustering_criteria(signal_in, samplerate, W, H, comps, 
@@ -441,7 +448,6 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
         heart_connect = (heart_signal[:lower], 
                          heart_comps[lower - N_fade:upper + N_fade], 
                          heart_signal[upper:])
-        
         
         # Aplicando fading para cada uno
         resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)

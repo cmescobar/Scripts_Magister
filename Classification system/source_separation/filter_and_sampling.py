@@ -834,10 +834,7 @@ def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
         num, den = signal.iirdesign(wp=freq_pass / (samplerate/2),
                                     ws=freq_stop / (samplerate/2),
                                     gpass=gpass, gstop=gstop)
-        # Se define de facto el padding en None ya que es solo una función para
-        # filtros FIR
-        gp_padding = None
-        
+                
         # Se define correct_by_gd en False ya que no se utilizará en algún caso
         correct_by_gd = False
         
@@ -850,11 +847,7 @@ def lowpass_filter(signal_in, samplerate, freq_pass, freq_stop,
         
         # Se define no plotear dado que no hay filtro (independiente de la entrada)
         plot_filter = False
-        
-        # Se define de facto el padding en None ya que es solo una función para
-        # filtros FIR
-        gp_padding = None
-        
+                
         # Se define correct_by_gd en False ya que no se utilizará en algún caso
         correct_by_gd = False
         

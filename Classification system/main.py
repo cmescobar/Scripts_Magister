@@ -1,16 +1,20 @@
 import os
+import soundfile as sf
 import matplotlib.pyplot as plt
 from heart_sound_segmentation.filter_and_sampling import downsampling_signal
 from heart_sound_segmentation.evaluation_functions import eval_sound_model
 from utils import signal_segmentation_db, find_and_open_audio, signal_segmentation,\
     find_segments_limits
-from source_separation.nmf_decompositions import nmf_masked_segments
+from source_separation.nmf_decompositions import nmf_to_all, nmf_on_segments, \
+    nmf_masked_segments
 from testing_functions import test_hss
 
 
-def preprocessing_audio(model_name, lowpass_params, symptom, 
-                        ausc_pos='toracic', priority=1,
-                        plot_segmentation=False):
+def preprocessing_audio(model_name, lowpass_params, symptom,
+                        nmf_parameters, ausc_pos='toracic', 
+                        priority=1, nmf_method='masked_segments',
+                        plot_segmentation=False,
+                        plot_separation=False):
     '''
     
     Parameters
@@ -30,9 +34,15 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
     priority : {1, 2, 3}
         Prioridad de la base de datos a revisar. Por defecto 
         es 1.
+    nmf_method : {'to_all', 'on_segments', 'masked_segments'}, optional
+        Método de descomposición NMF a aplicar en la separación
+        de fuentes. Por defecto es "masked_segments".
     plot_segmentation : bool, optional
         Booleano que indica si es que se grafica el proceso de 
         segmentación. Por defecto es False.
+    plot_separation : bool, optional
+        Booleano que indica si es que se grafica el proceso de 
+        separación de fuentes. Por defecto es False.
 
     '''
     # Definición de la frecuencia de muestreo deseada para 
@@ -58,11 +68,77 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
                                 plot_outputs=False)
 
     # Definiendo los intervalos para realizar la separación de fuentes
-    interval_list = find_segments_limits(y_out2)
+    interval_list = find_segments_limits(y_out2, segments_return='Heart')
+    
+    # Print de sanidad
+    print(f'Aplicando separación de fuentes {nmf_method}...')
     
     # Aplicando la separación de fuentes
+    if nmf_method == 'to_all':
+        (resp_signal, heart_signal), _ = \
+            nmf_to_all(audio_dwns, samplerate_des, hs_pos=y_out2, 
+                       interval_list=interval_list, 
+                       n_components=nmf_parameters['n_components'], 
+                       N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
+                       noverlap=nmf_parameters['noverlap'], 
+                       repeat=nmf_parameters['repeat'], 
+                       padding=nmf_parameters['padding'], 
+                       window=nmf_parameters['window'],
+                       init=nmf_parameters['init'], 
+                       solver=nmf_parameters['solver'], 
+                       beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                       max_iter=nmf_parameters['max_iter'],
+                       alpha_nmf=nmf_parameters['alpha_nmf'], 
+                       l1_ratio=nmf_parameters['l1_ratio'], 
+                       random_state=nmf_parameters['random_state'],
+                       dec_criteria=nmf_parameters['dec_criteria'])
     
     
+    elif nmf_method == 'on_segments':
+        resp_signal, heart_signal = \
+            nmf_on_segments(audio_dwns, samplerate_des, 
+                            interval_list=interval_list, 
+                            n_components=nmf_parameters['n_components'],
+                            N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
+                            N_fade=nmf_parameters['N_fade'], 
+                            noverlap=nmf_parameters['noverlap'], 
+                            repeat=nmf_parameters['repeat'], 
+                            padding=nmf_parameters['padding'], 
+                            window=nmf_parameters['window'],
+                            init=nmf_parameters['init'], 
+                            solver=nmf_parameters['solver'], 
+                            beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                            max_iter=nmf_parameters['max_iter'],
+                            alpha_nmf=nmf_parameters['alpha_nmf'], 
+                            l1_ratio=nmf_parameters['l1_ratio'], 
+                            random_state=nmf_parameters['random_state'],
+                            dec_criteria=nmf_parameters['dec_criteria'])
+    
+    
+    elif nmf_method == 'masked_segments':
+        (resp_signal, heart_signal), _ = \
+            nmf_masked_segments(audio_dwns, samplerate_des, hs_pos=y_out2, 
+                                interval_list=interval_list, 
+                                n_components=nmf_parameters['n_components'],
+                                N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
+                                N_fade=nmf_parameters['N_fade'], 
+                                noverlap=nmf_parameters['noverlap'], 
+                                repeat=nmf_parameters['repeat'], 
+                                padding=nmf_parameters['padding'], 
+                                window=nmf_parameters['window'],
+                                init=nmf_parameters['init'], 
+                                solver=nmf_parameters['solver'], 
+                                beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                                max_iter=nmf_parameters['max_iter'],
+                                alpha_nmf=nmf_parameters['alpha_nmf'], 
+                                l1_ratio=nmf_parameters['l1_ratio'], 
+                                random_state=nmf_parameters['random_state'],
+                                dec_criteria=nmf_parameters['dec_criteria'])
+    else:
+        raise Exception('Opción para el método de descomposición no '
+                        'válida.')
+    
+    print('Separación de fuentes completada')
     
     # Graficando la segmentación
     if plot_segmentation:
@@ -72,13 +148,44 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
         plt.plot(y_hat_to[0,:,0], label=r'$S_0$', color='limegreen', zorder=2)
         plt.plot(y_hat_to[0,:,1], label=r'$S_1$', color='red', zorder=1)
         plt.plot(y_hat_to[0,:,2], label=r'$S_2$', color='blue', zorder=1)
+        for i in interval_list:
+            plt.axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
         plt.legend(loc='lower right')
         plt.yticks([0, 0.5, 1])
         plt.ylabel(r'$P(y(n) = k | X)$')
         plt.show()
         
-    
+    # Graficando la separación de fuentes
+    if plot_separation:
+        fig, ax = plt.subplots(3, 1, figsize=(15,7), sharex=True)
+        
+        ax[0].plot(audio_dwns)
+        ax[0].set_ylabel('Señal\noriginal')
+        for i in interval_list:
+            ax[0].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        
+        ax[1].plot(resp_signal)
+        ax[1].set_ylabel('Señal\nRespiratoria')
+        for i in interval_list:
+            ax[1].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        
+        ax[2].plot(heart_signal)
+        ax[2].set_ylabel('Señal\nCardiaca')
+        for i in interval_list:
+            ax[2].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        
+        # Ajustando las etiquetas del eje
+        fig.align_ylabels(ax[:])
+        # Quitando el espacio entre gráficos
+        fig.subplots_adjust(wspace=0.1, hspace=0)
 
+        plt.suptitle('Separación de fuentes')
+        plt.show()
+        
+    # Grabando archivos temporales
+    sf.write('resp_signal_temp.wav', resp_signal, samplerate=samplerate_des)
+    sf.write('heart_signal_temp.wav', heart_signal, samplerate=samplerate_des)
+    
 
 if __name__ == '__main__':
     # Definición de la función a revisar
@@ -90,16 +197,28 @@ if __name__ == '__main__':
     elif test_func == 'preprocessing_audio':
         # Parámetros de la función
         lowpass_params = {'freq_pass': 140, 'freq_stop': 150}
-        model_name = 'segnet_based_12_10'
+        model_name = 'definitive_segnet_based'
         
         # Parámetros base de datos
         symptom = 'Healthy'
         priority = 1
-        ausc_pos='toracic'
+        ausc_pos = 'toracic'
+        nmf_method = 'on_segments'
+        
+        # Definición de los parámetros NMF
+        nmf_parameters = {'n_components': 5, 'N': 1024, 'N_lax': 100, 
+                          'N_fade': 100, 'noverlap': 768, 'repeat': 0, 
+                          'padding': 0, 'window': 'hamming', 'init': 'random',
+                          'solver': 'mu', 'beta': 1, 'tol': 1e-4, 
+                          'max_iter': 200, 'alpha_nmf': 0, 'l1_ratio': 0, 
+                          'random_state': 0, 'dec_criteria': 'vote'}
         
         # Aplicando la rutina
-        preprocessing_audio(model_name, lowpass_params, symptom=symptom, 
+        preprocessing_audio(model_name, lowpass_params, symptom=symptom,
+                            nmf_parameters=nmf_parameters,  
                             ausc_pos=ausc_pos, priority=priority,
-                            plot_segmentation=False)
-
-
+                            nmf_method=nmf_method,
+                            plot_segmentation=False,
+                            plot_separation=True)
+        
+        

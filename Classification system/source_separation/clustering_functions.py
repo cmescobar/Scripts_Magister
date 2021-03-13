@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ast import literal_eval
+from scipy.signal import welch
 from sklearn.decomposition import PCA
-from evaluation_metrics import get_PSD
 from sklearn import preprocessing, svm
 from sklearn.neighbors import KNeighborsClassifier
 from librosa.feature import mfcc, spectral_centroid, spectral_rolloff, \
@@ -97,11 +97,17 @@ def spectral_correlation_test(W, signal_in, samplerate, N_lax, interval_list,
     for i in range(len(resp_list)):
         # Agregando ceros para la cantidad de puntos que se necesita. En caso de que los
         # segmentos sean más largos se cortan hasta N
-        resp = np.concatenate((resp_list[i], [0] * (N - len(resp_list[i])) ))[:N]
-        print(f'N = {N}, len_resp_array = {len(resp_list[i])}, len_resp_post = {len(resp)}')
-        resp_array[i] = 20 * np.log10(1 / N * abs(np.fft.fft(resp)) 
-                                      + 1e-12)[:W.shape[0]]
-    
+        if len(resp_list[i]) < N:
+            resp = np.concatenate((resp_list[i], [0] * (N - len(resp_list[i])) ))
+        else:
+            resp = resp_list[i]
+        
+        # Calculando el periodograma
+        _, resp_to = welch(resp, fs=samplerate, nperseg=N, noverlap=int(0.75*N))
+        
+        # Agregando
+        resp_array[i] = 20 * np.log10(resp_to + 1e-12)
+        
     # Si es que se promedian los espectros
     if prom_spectra:
         resp_array = np.array([resp_array.mean(axis=0)])

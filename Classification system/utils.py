@@ -263,7 +263,7 @@ def segments_redimension(signal_in, length_desired, kind='linear'):
     return f(x_new)
 
 
-def find_segments_limits(y_hat):
+def find_segments_limits(y_hat, segments_return='Non-Heart'):
     '''Función que obtiene los límites de las posiciones de los sonidos
     cardiacos a partir de la señal binaria indica su presencia.
     
@@ -271,6 +271,10 @@ def find_segments_limits(y_hat):
     ----------
     y_hat : ndarray
         Señal binaria que indica la presencia de sonidos cardiacos.
+    segments_return : {'Heart', 'Non-Heart'}, optional
+        Opción que decide si es que se retornan los intervalos de sonido 
+        cardiaco o los intervalos libres de sonido cardiaco. Por defecto
+        es 'Non-Heart'.
     
     Returns
     -------
@@ -278,7 +282,14 @@ def find_segments_limits(y_hat):
         Lista de intervalos en los que se encuentra el sonido cardiaco.
     '''
     # Encontrando los puntos de cada sonido
-    hss_pos = np.where(y_hat == 0)[0]
+    if segments_return == 'Non-Heart':
+        hss_pos = np.where(y_hat == 0)[0]
+    
+    elif segments_return == 'Heart':
+        hss_pos = np.where(y_hat == 1)[0]
+        
+    else:
+        raise Exception('Opción no válida para "segments_return".')
     
     # Definición de la lista de intervalos
     interval_list = list()

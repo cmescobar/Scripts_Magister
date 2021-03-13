@@ -294,9 +294,9 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
     Returns
     -------
     resp_signal : ndarray
-        Señal respiratoria aproximada mediante la descomposición.
+        Señal respiratoria obtenida mediante la descomposición.
     heart_signal : ndarray
-        Señal cardíaca aproximada mediante la descomposición.
+        Señal cardíaca obtenida mediante la descomposición.
     '''    
     # Definición de la señal respiratoria de salida
     resp_signal = np.copy(signal_in)
@@ -415,7 +415,7 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
         # Definiendo el segmento
         signal_to[lower - N_fade:upper + N_fade] += to_decompose_faded
         resp_signal[lower:upper] -= signal_to[lower:upper]
-
+    
     # Aplicando NMF 
     comps, _, _, W, H = \
                 nmf_decomposition(signal_to, samplerate, 
@@ -433,6 +433,15 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
             _clustering_criteria(signal_in, samplerate, W, H, comps, 
                                  hs_pos=hs_pos, interval_list=interval_list, 
                                  N_lax=N_lax, dec_criteria=dec_criteria)
+    
+    plt.subplot(3,1,1)
+    plt.plot(signal_to)
+    plt.subplot(3,1,2)
+    plt.plot(resp_comps)
+    plt.subplot(3,1,3)
+    plt.plot(heart_comps)
+    plt.show()
+    
     
     # Para conectarlas adecuadamente a la señal de interés
     for interval in interval_list:

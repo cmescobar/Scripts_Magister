@@ -22,7 +22,7 @@ if __name__ == '__main__':
         nmf_method = 'to_all'
         
         # Definición de los parámetros NMF
-        nmf_parameters = {'n_components': 10, 'N': 1024, 'N_lax': 100, 
+        nmf_parameters = {'n_components': 5, 'N': 1024, 'N_lax': 100, 
                           'N_fade': 100, 'noverlap': 768, 'repeat': 0, 
                           'padding': 0, 'window': 'hamming', 'init': 'random',
                           'solver': 'mu', 'beta': 1, 'tol': 1e-4, 

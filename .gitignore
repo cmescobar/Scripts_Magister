@@ -51,7 +51,8 @@ Heart_sound_segmentation_v2/Analysis_results
 OLD/Components 2020-08-05/
 OLD/Components 2020-08-10/
 
-Source separation main/Database_manufacturing
+Source_separation_main/Database_manufacturing
+Source_separation_main_v2/_beta_cardiorespiratory_database/Heart_Resp_Sounds
 
 # Sonidos en el sistema completo
 Classification system/cardiorespiratory_database

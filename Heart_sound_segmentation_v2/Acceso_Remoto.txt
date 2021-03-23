@@ -20,6 +20,9 @@ virtualenv <nombre del entorno> --python=python3
 # Cómo activar el entorno
 source <nombre del entorno>/bin/activate
 
+# Instalar paquete en la librería
+python3 -m pip install <nombre del paquete>
+
 # Para desactivar, es necesario ingresar "deactivate"
 
 
@@ -46,6 +49,11 @@ nvtop
 # Para re abrir una sesión que me expulsa
 screen -r -d <número de la sesión>
 
+# Antes de correrlo para hacer que funcione en otra carpeta
+virtualenv --relocatable <nombre del entorno> 			
+
+# Eliminar una carpeta completa
+rm -r <nombre de la dirección o carpeta a eliminar>
 
 
 
@@ -81,3 +89,11 @@ scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_1
 scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_8.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_cross.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/definitive_segnet_based-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.h5 /home/geduran/cmescobar/Paper_models/definitive_segnet_based_db.txt" ./Paper_models/definitive_segnet_based
+scp -r "Source_separation_main_v2" geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
+scp main_2.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2
+virtualenv --relocatable env
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Source_separation_main_v2/Results/Register_on_segments.txt /home/geduran/cmescobar/Source_separation_main_v2/Results/Register_masked_segments.txt" .
+scp source_separation/nmf_decompositions.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/source_separation
+scp _beta_cardiorespiratory_database/Heart_Sounds/Interval_list_corrected.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/_beta_cardiorespiratory_database/Heart_Sounds
+scp source_separation/fading_functions.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/source_separation
+rm -r Source_separation_main_v2

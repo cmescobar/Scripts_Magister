@@ -54,9 +54,9 @@ def preprocessing_audio(model_name, lowpass_params, symptom,
     samplerate_des = 11025  # Hz
     
     # Cargando el archivo de audio 
-    audio, samplerate = find_and_open_audio(symptom='Healthy', 
-                                            ausc_pos='toracic', 
-                                            priority=1)
+    audio, samplerate = find_and_open_audio(symptom=symptom, 
+                                            ausc_pos=ausc_pos, 
+                                            priority=priority)
     
     # Realizando un downsampling para obtener la tasa de muestreo
     # fs = 11025 Hz utilizada en la separación de fuentes

@@ -43,10 +43,10 @@ def fading_signal(signal_in, N, beta=1, side='both'):
     
     elif side == 'right':
         # Segmento al cual se le aplica la ventana fade
-        if len(signal_in[-N:]) < N:
+        # if len(signal_in[-N:]) < N:
             # Paddear
-            signal_in = np.concatenate((signal_in, [0] * (N - len(signal_in)) ))
-        
+            # signal_in = np.concatenate((signal_in, [0] * (N - len(signal_in)) ))
+            
         faded_seg = raised_cosine_fading(N, beta, side=side) * signal_in[-N:]
         
         # Reconstruyendo
@@ -80,13 +80,16 @@ def fade_connect_signals(signal_list, N, beta=1):
     signal_faded = signal_list[0]
     
     for i in range(1, len(signal_list)):
+        # Definición de la cantidad de puntos de fading
+        N_to = min(N, len(signal_faded), len(signal_list[i]))
+        
         # Aplicando fading de manera correspondiente a las señales
-        faded_left = fading_signal(signal_faded, N, beta, side='right')
-        faded_right = fading_signal(signal_list[i], N, beta, side='left')
+        faded_left = fading_signal(signal_faded, N_to, beta, side='right')
+        faded_right = fading_signal(signal_list[i], N_to, beta, side='left')
 
         # Rellenando con ceros
-        to_sum_left = np.concatenate((faded_left, [0] * (len(signal_list[i]) - N)))
-        to_sum_right = np.concatenate(([0] * (len(signal_faded) - N), faded_right))
+        to_sum_left = np.concatenate((faded_left, [0] * (len(signal_list[i]) - N_to)))
+        to_sum_right = np.concatenate(([0] * (len(signal_faded) - N_to), faded_right))
 
         # Se redefine signal_faded para la siguiente iteración
         signal_faded = to_sum_left + to_sum_right

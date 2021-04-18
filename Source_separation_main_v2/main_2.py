@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 import source_separation.evaluation_metrics as ev_met
 from ast import literal_eval
 from numba import cuda
-from utils import signal_segmentation, find_segments_limits
+from utils import signal_segmentation, find_segments_limits, nmf_process
 from process_functions import preprocessing_audio
 from heart_sound_segmentation.filter_and_sampling import downsampling_signal, \
     upsampling_signal, lowpass_filter, highpass_filter
 from source_separation.nmf_decompositions import nmf_to_all, nmf_on_segments, \
-    nmf_masked_segments
+    nmf_masked_segments, nmf_replacing_segments
 
 
 # Variable global
@@ -21,7 +21,7 @@ lowpass_params = {'freq_pass': 140, 'freq_stop': 150}
 
 
 # Definiendo la GPU
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def get_mixed_signal(signal_in_1, signal_in_2, snr_expected,
@@ -209,136 +209,6 @@ def nmf_process_OLD(signal_in, samplerate, hs_pos, interval_list, nmf_parameters
     return resp_signal, heart_signal
 
 
-def nmf_process(signal_in, samplerate, hs_pos, interval_list, nmf_parameters,
-                filter_parameters, nmf_method='masked_segments'):
-    '''Función que permite realizar la descomposición NMF en base a los 
-    parámetros de interés a modificar.
-    
-    Parameters
-    ----------
-    signal_in : ndarray or list
-        Señal a descomponer.
-    samplerate : int
-        Tasa de muestreo de la señal.
-    hs_pos : ndarray
-        Señal binaria que indica las posiciones de los sonidos cardiacos.
-    interval_list : list
-        Lista con los intervalos donde se encuentran los sonidos cardiacos.
-    nmf_parameters : dict
-        Diccionario que contiene los parámetros de las funciones de 
-        descomposición NMF.
-    nmf_method : {'to_all', 'on_segments', 'masked_segments'}, optional
-        Método de descomposición NMF a aplicar en la separación
-        de fuentes. Por defecto es "masked_segments".
-    
-    Returns
-    -------
-    resp_signal : ndarray
-        Señal respiratoria obtenida mediante la descomposición.
-    heart_signal : ndarray
-        Señal cardíaca obtenida mediante la descomposición.
-    '''
-    # Si es que se decide descomponer únicamente la franja de baja frecuencia 
-    if filter_parameters['bool']:
-        # Señal de entrada
-        _, signal_to = \
-                lowpass_filter(signal_in, samplerate,
-                               freq_pass=filter_parameters['freq_pass'],
-                               freq_stop=filter_parameters['freq_stop'],
-                               normalize=False)
-        
-        # Señal a conectar con la respiración
-        _, signal_upper = \
-                highpass_filter(signal_in, samplerate, 
-                                freq_stop=filter_parameters['freq_pass'], 
-                                freq_pass=filter_parameters['freq_stop'],
-                                normalize=False)
-    else:
-        signal_to = signal_in
-    
-    # Aplicando la separación de fuentes
-    if nmf_method == 'to_all':
-        (resp_signal, heart_signal), _ = \
-            nmf_to_all(signal_to, samplerate, hs_pos=hs_pos, 
-                       interval_list=interval_list, 
-                       n_components=nmf_parameters['n_components'], 
-                       N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
-                       noverlap=nmf_parameters['noverlap'], 
-                       repeat=nmf_parameters['repeat'], 
-                       padding=nmf_parameters['padding'], 
-                       window=nmf_parameters['window'],
-                       init=nmf_parameters['init'], 
-                       solver=nmf_parameters['solver'], 
-                       beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                       max_iter=nmf_parameters['max_iter'],
-                       alpha_nmf=nmf_parameters['alpha_nmf'], 
-                       l1_ratio=nmf_parameters['l1_ratio'], 
-                       random_state=nmf_parameters['random_state'],
-                       dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'on_segments':
-        resp_signal, heart_signal = \
-            nmf_on_segments(signal_to, samplerate, interval_list=interval_list, 
-                            n_components=nmf_parameters['n_components'],
-                            N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                            N_fade=nmf_parameters['N_fade'], 
-                            noverlap=nmf_parameters['noverlap'], 
-                            repeat=nmf_parameters['repeat'], 
-                            padding=nmf_parameters['padding'], 
-                            window=nmf_parameters['window'],
-                            init=nmf_parameters['init'], 
-                            solver=nmf_parameters['solver'], 
-                            beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                            max_iter=nmf_parameters['max_iter'],
-                            alpha_nmf=nmf_parameters['alpha_nmf'], 
-                            l1_ratio=nmf_parameters['l1_ratio'], 
-                            random_state=nmf_parameters['random_state'],
-                            dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'masked_segments':
-        (resp_signal, heart_signal), _ = \
-            nmf_masked_segments(signal_to, samplerate, hs_pos=hs_pos, 
-                                interval_list=interval_list, 
-                                n_components=nmf_parameters['n_components'],
-                                N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                                N_fade=nmf_parameters['N_fade'], 
-                                noverlap=nmf_parameters['noverlap'], 
-                                repeat=nmf_parameters['repeat'], 
-                                padding=nmf_parameters['padding'], 
-                                window=nmf_parameters['window'],
-                                init=nmf_parameters['init'], 
-                                solver=nmf_parameters['solver'], 
-                                beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                                max_iter=nmf_parameters['max_iter'],
-                                alpha_nmf=nmf_parameters['alpha_nmf'], 
-                                l1_ratio=nmf_parameters['l1_ratio'], 
-                                random_state=nmf_parameters['random_state'],
-                                dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    # Si es que se filtró, se vuelve a conectar con la información de alta
-    # frecuencia. 
-    if filter_parameters['bool']: 
-        # Filtrando frecuencias altas
-        _, resp_signal = \
-                lowpass_filter(resp_signal, samplerate,
-                               freq_pass=filter_parameters['freq_pass'],
-                               freq_stop=filter_parameters['freq_stop'], 
-                               normalize=False)
-        _, heart_signal = \
-                lowpass_filter(heart_signal, samplerate,
-                               freq_pass=filter_parameters['freq_pass'],
-                               freq_stop=filter_parameters['freq_stop'], 
-                               normalize=False)
-    
-        # Conectar la señal respiratoria con la banda superior de la señal
-        resp_signal = resp_signal + signal_upper[:len(resp_signal)]
-    
-    return resp_signal, heart_signal
-
-
 def preprocess_study(signal_index, nmf_parameters, snr_expected, filter_parameters, 
                      nmf_method='masked_segments', print_metrics=False,
                      base_factor= 0.05, N_wind=100, plot_segmentation=False, 
@@ -381,6 +251,9 @@ def preprocess_study(signal_index, nmf_parameters, snr_expected, filter_paramete
                              plot_signals=False, print_snr=True, 
                              normalize=False)
     
+    print(resp_name, heart_name)
+    sf.write(f'_beta_cardiorespiratory_database/Heart_Resp_Sounds/{signal_index}.wav',
+             mixed_to, samplerate_des)
     
     ######### Posición de los sonidos cardiacos #########
     
@@ -465,7 +338,7 @@ def preprocess_study(signal_index, nmf_parameters, snr_expected, filter_paramete
         fig.align_ylabels(ax[:])
         # Quitando el espacio entre gráficos
         fig.subplots_adjust(wspace=0.1, hspace=0)
-
+        
         plt.suptitle('Separación de fuentes')
         plt.show()
     
@@ -506,7 +379,7 @@ def preprocess_study(signal_index, nmf_parameters, snr_expected, filter_paramete
 
 def preprocess_study_regbased(signal_index, nmf_parameters, snr_expected, filter_parameters, 
                               nmf_method='masked_segments', print_metrics=False,
-                              base_factor= 0.05, N_wind=100, plot_separation=False,
+                              base_factor=0.05, N_wind=100, plot_separation=False,
                               N_expand=30):
     def _adjust_lenghts(signal_1, signal_2):
         # Asegurando de que los largos de las señales sean los mismos
@@ -531,7 +404,7 @@ def preprocess_study_regbased(signal_index, nmf_parameters, snr_expected, filter
             lower = interval[0] - N_exp
             upper = interval[1] + N_exp
             
-            # Condiciones de botde
+            # Condiciones de borde
             if lower <= 0:
                 lower = 0
             if upper > len(_signal_in):
@@ -632,28 +505,41 @@ def preprocess_study_regbased(signal_index, nmf_parameters, snr_expected, filter
         fig, ax = plt.subplots(3, 1, figsize=(15,7), sharex=True)
 
         ax[0].plot(mixed_to)
-        ax[0].set_ylabel('Señal\noriginal')
+        # ax[0].set_ylabel('Señal\noriginal')
+        ax[0].set_ylabel('Original\nsignal')
         for i in interval_list:
             ax[0].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        ax[0].set_ylim([-1.2, 1.2])
 
-        ax[1].plot(resp_to, color='C0', linewidth=2)
-        ax[1].plot(resp_pred, color='C1')
-        ax[1].set_ylabel('Señal\nRespiratoria')
+        # ax[1].plot(resp_to, color='C0', linewidth=2)
+        ax[1].plot(resp_pred, color='C0')
+        # ax[1].set_ylabel('Señal\nRespiratoria')
+        ax[1].set_ylabel('Lung\nsignal')
         for i in interval_list:
             ax[1].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        ax[1].set_ylim([-1.2, 1.2])
 
-        ax[2].plot(heart_to, color='C0', linewidth=2)
-        ax[2].plot(heart_pred, color='C1')
-        ax[2].set_ylabel('Señal\nCardiaca')
+        # ax[2].plot(heart_to, color='C0', linewidth=2)
+        ax[2].plot(heart_pred, color='C0')
+        # ax[2].set_ylabel('Señal\nCardiaca')
+        ax[2].set_ylabel('Heart\nsignal')
         for i in interval_list:
             ax[2].axvspan(xmin=i[0], xmax=i[1], facecolor='purple', alpha=0.1)
+        ax[2].set_ylim([-1.2, 1.2])
 
         # Ajustando las etiquetas del eje
         fig.align_ylabels(ax[:])
         # Quitando el espacio entre gráficos
         fig.subplots_adjust(wspace=0.1, hspace=0)
-
-        plt.suptitle('Separación de fuentes')
+        
+        ax[2].set_xlim([0, 35000])
+        ax[2].set_xlabel('Samples')
+        # ax[2].set_xlabel('Muestras')
+        
+        # plt.savefig('Images/Original_signal_and_components_SPA.pdf', transparent=True)
+        plt.savefig('Images/Original_signal_and_components.pdf', transparent=True)
+        # plt.suptitle('Separación de fuentes')
+        plt.suptitle('Source separation')
         plt.show()
     
     # plt.figure(figsize=(15,7))
@@ -839,7 +725,7 @@ if __name__ == '__main__':
     heart_filenames.sort()
     
     # Definición de la rutina a ejecutar
-    func_to = 'iterations_regbased'
+    func_to = 'complete_regbased'
     
     for i in range(len(resp_filenames)):
         print(resp_filenames[i], heart_filenames[i])
@@ -852,7 +738,7 @@ if __name__ == '__main__':
         # noverlap
         # n_comps
         
-        snr_expected = 0
+        snr_expected = -10
         filter_parameters = {'bool': True , 'freq_pass': 980, 'freq_stop': 1000}
         nmf_parameters = {'n_components': 5, 'N': 1024, 'N_lax': 100, 
                         'N_fade': 100, 'noverlap': 768, 'repeat': 0, 
@@ -863,7 +749,7 @@ if __name__ == '__main__':
                         'filter_parameters': filter_parameters}
         
             
-        nmf_method = 'masked_segments'
+        nmf_method = 'to_all'
         eval_db(nmf_method, snr_expected, nmf_parameters, 
                 filter_parameters=filter_parameters,
                 file_mode='a', base_factor=0, N_wind=100,
@@ -879,7 +765,7 @@ if __name__ == '__main__':
         
         snr_expected = 0
         filter_parameters = {'bool': False , 'freq_pass': 980, 'freq_stop': 1000}
-        nmf_parameters = {'n_components': 5, 'N': 1024, 'N_lax': 100, 
+        nmf_parameters = {'n_components': 10, 'N': 1024, 'N_lax': 100, 
                         'N_fade': 100, 'noverlap': 768, 'repeat': 0, 
                         'padding': 0, 'window': 'hamming', 'init': 'random',
                         'solver': 'mu', 'beta': 1, 'tol': 1e-4, 
@@ -888,11 +774,11 @@ if __name__ == '__main__':
                         'filter_parameters': filter_parameters}
         
             
-        nmf_method = 'on_segments'
+        nmf_method = 'replace_segments'
         eval_db_regbased(nmf_method, snr_expected, nmf_parameters, 
                          filter_parameters=filter_parameters,
                          file_mode='a', base_factor=0, N_wind=100,
-                         save_res=False)
+                         save_res=False, plot_separation=True)
     
      
     elif func_to == 'single':
@@ -904,26 +790,26 @@ if __name__ == '__main__':
                           'max_iter': 200, 'alpha_nmf': 0, 'l1_ratio': 0, 
                           'random_state': 0, 'dec_criteria': 'vote'}
 
-        signal_index = 11
+        signal_index = 7
         a = preprocess_study(signal_index, nmf_parameters, 
                              snr_expected=0, filter_parameters=filter_parameters,
-                             nmf_method='to_all', plot_segmentation=False,
+                             nmf_method='to_all', plot_segmentation=True,
                              plot_separation=True, base_factor=0, N_wind=100)
     
     
     elif func_to == 'single_regbased':
-        filter_parameters = {'bool': True , 'freq_pass': 980, 'freq_stop': 1000}
-        nmf_parameters = {'n_components': 5, 'N': 1024, 'N_lax': 100, 
-                          'N_fade': 100, 'noverlap': 768, 'repeat': 0, 
+        filter_parameters = {'bool': False , 'freq_pass': 980, 'freq_stop': 1000}
+        nmf_parameters = {'n_components': 10, 'N': 2048, 'N_lax': 100, 
+                          'N_fade': 100, 'noverlap': int(0.9 * 2048), 'repeat': 0, 
                           'padding': 0, 'window': 'hamming', 'init': 'random',
                           'solver': 'mu', 'beta': 1, 'tol': 1e-4, 
-                          'max_iter': 200, 'alpha_nmf': 0, 'l1_ratio': 0, 
-                          'random_state': 0, 'dec_criteria': 'vote'}
+                          'max_iter': 500, 'alpha_nmf': 0, 'l1_ratio': 0, 
+                          'random_state': 0, 'dec_criteria': 'temp_criterion'}
 
-        signal_index = 5
+        signal_index = 10
         a = preprocess_study_regbased(signal_index, nmf_parameters, 
                                       snr_expected=0, filter_parameters=filter_parameters, 
-                                      nmf_method='on_segments', plot_separation=True, 
+                                      nmf_method='replace_segments', plot_separation=True, 
                                       base_factor=0, N_wind=100)
     
 
@@ -991,14 +877,14 @@ if __name__ == '__main__':
     
     elif func_to == 'iterations_regbased':
         # Definición del tipo de NMF a realizar
-        nmf_method = 'to_all'
+        nmf_method = 'replace_segments'
         snr_expected = 0
-        base_factor = 0
+        base_factor = 0.05
         N_wind = 100
         
         # Tuplas de opciones
         dec_crit_opts = ('vote', 'spec_criterion', 'energy_criterion', 'temp_criterion')
-        bool_filt_opts = (False, True)
+        bool_filt_opts = [False] # (False, True)
         beta_opts = (1, 2)
         n_comps_opts = (2, 3, 5, 7, 10, 15, 20, 30)
         N_opts = (512, 1024, 2048, 4096)

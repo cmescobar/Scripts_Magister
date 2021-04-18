@@ -1,10 +1,11 @@
 import soundfile as sf
 import matplotlib.pyplot as plt
 from utils import find_and_open_audio, signal_segmentation,\
-    find_segments_limits
+    find_segments_limits, nmf_process
 from source_separation.nmf_decompositions import nmf_to_all, nmf_on_segments, \
     nmf_masked_segments
 from heart_sound_segmentation.filter_and_sampling import downsampling_signal
+
 
 
 def preprocessing_audio_db(model_name, lowpass_params, symptom,
@@ -77,74 +78,13 @@ def preprocessing_audio_db(model_name, lowpass_params, symptom,
     # Print de sanidad
     print(f'Aplicando separación de fuentes {nmf_method}...')
     
-    
     # Aplicando la separación de fuentes
-    if nmf_method == 'to_all':
-        (resp_signal, heart_signal), _ = \
-            nmf_to_all(audio_dwns, samplerate_des, hs_pos=y_out2, 
-                       interval_list=interval_list, 
-                       n_components=nmf_parameters['n_components'], 
-                       N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
-                       noverlap=nmf_parameters['noverlap'], 
-                       repeat=nmf_parameters['repeat'], 
-                       padding=nmf_parameters['padding'], 
-                       window=nmf_parameters['window'],
-                       init=nmf_parameters['init'], 
-                       solver=nmf_parameters['solver'], 
-                       beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                       max_iter=nmf_parameters['max_iter'],
-                       alpha_nmf=nmf_parameters['alpha_nmf'], 
-                       l1_ratio=nmf_parameters['l1_ratio'], 
-                       random_state=nmf_parameters['random_state'],
-                       dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'on_segments':
-        resp_signal, heart_signal = \
-            nmf_on_segments(audio_dwns, samplerate_des, 
+    resp_signal, heart_signal = \
+                nmf_process(audio_dwns, samplerate_des, hs_pos=y_out2, 
                             interval_list=interval_list, 
-                            n_components=nmf_parameters['n_components'],
-                            N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                            N_fade=nmf_parameters['N_fade'], 
-                            noverlap=nmf_parameters['noverlap'], 
-                            repeat=nmf_parameters['repeat'], 
-                            padding=nmf_parameters['padding'], 
-                            window=nmf_parameters['window'],
-                            init=nmf_parameters['init'], 
-                            solver=nmf_parameters['solver'], 
-                            beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                            max_iter=nmf_parameters['max_iter'],
-                            alpha_nmf=nmf_parameters['alpha_nmf'], 
-                            l1_ratio=nmf_parameters['l1_ratio'], 
-                            random_state=nmf_parameters['random_state'],
-                            dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'masked_segments':
-        (resp_signal, heart_signal), _ = \
-            nmf_masked_segments(audio_dwns, samplerate_des, hs_pos=y_out2, 
-                                interval_list=interval_list, 
-                                n_components=nmf_parameters['n_components'],
-                                N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                                N_fade=nmf_parameters['N_fade'], 
-                                noverlap=nmf_parameters['noverlap'], 
-                                repeat=nmf_parameters['repeat'], 
-                                padding=nmf_parameters['padding'], 
-                                window=nmf_parameters['window'],
-                                init=nmf_parameters['init'], 
-                                solver=nmf_parameters['solver'], 
-                                beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                                max_iter=nmf_parameters['max_iter'],
-                                alpha_nmf=nmf_parameters['alpha_nmf'], 
-                                l1_ratio=nmf_parameters['l1_ratio'], 
-                                random_state=nmf_parameters['random_state'],
-                                dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    else:
-        raise Exception('Opción para el método de descomposición no '
-                        'válida.')
-    
+                            nmf_parameters=nmf_parameters,
+                            filter_parameters={'bool': False}, 
+                            nmf_method=nmf_method)
     
     print('Separación de fuentes completada')
     
@@ -203,6 +143,7 @@ def preprocessing_audio_db(model_name, lowpass_params, symptom,
 
 def preprocessing_audio(signal_in, samplerate, model_name, lowpass_params,
                         nmf_parameters, nmf_method='masked_segments',
+                        filter_parameters={'bool': False},
                         plot_segmentation=False,
                         plot_separation=False):
     '''Función que permite hacer un preprocesamiento de la señal
@@ -221,7 +162,8 @@ def preprocessing_audio(signal_in, samplerate, model_name, lowpass_params,
         Diccionario que contiene la información del filtro pasa 
         bajos en la salida de la red. Si es None, no se utiliza. 
         Por defecto es None.
-    nmf_method : {'to_all', 'on_segments', 'masked_segments'}, optional
+    nmf_method : {'to_all', 'on_segments', 'masked_segments', 
+                  'replace_segments'}, optional
         Método de descomposición NMF a aplicar en la separación
         de fuentes. Por defecto es "masked_segments".
     plot_segmentation : bool, optional
@@ -261,73 +203,13 @@ def preprocessing_audio(signal_in, samplerate, model_name, lowpass_params,
     # Print de sanidad
     print(f'Aplicando separación de fuentes {nmf_method}...')
     
-    
     # Aplicando la separación de fuentes
-    if nmf_method == 'to_all':
-        (resp_signal, heart_signal), _ = \
-            nmf_to_all(audio_dwns, samplerate_des, hs_pos=y_out2, 
-                       interval_list=interval_list, 
-                       n_components=nmf_parameters['n_components'], 
-                       N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
-                       noverlap=nmf_parameters['noverlap'], 
-                       repeat=nmf_parameters['repeat'], 
-                       padding=nmf_parameters['padding'], 
-                       window=nmf_parameters['window'],
-                       init=nmf_parameters['init'], 
-                       solver=nmf_parameters['solver'], 
-                       beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                       max_iter=nmf_parameters['max_iter'],
-                       alpha_nmf=nmf_parameters['alpha_nmf'], 
-                       l1_ratio=nmf_parameters['l1_ratio'], 
-                       random_state=nmf_parameters['random_state'],
-                       dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'on_segments':
-        resp_signal, heart_signal = \
-            nmf_on_segments(audio_dwns, samplerate_des, 
+    resp_signal, heart_signal = \
+                nmf_process(audio_dwns, samplerate_des, hs_pos=y_out2, 
                             interval_list=interval_list, 
-                            n_components=nmf_parameters['n_components'],
-                            N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                            N_fade=nmf_parameters['N_fade'], 
-                            noverlap=nmf_parameters['noverlap'], 
-                            repeat=nmf_parameters['repeat'], 
-                            padding=nmf_parameters['padding'], 
-                            window=nmf_parameters['window'],
-                            init=nmf_parameters['init'], 
-                            solver=nmf_parameters['solver'], 
-                            beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                            max_iter=nmf_parameters['max_iter'],
-                            alpha_nmf=nmf_parameters['alpha_nmf'], 
-                            l1_ratio=nmf_parameters['l1_ratio'], 
-                            random_state=nmf_parameters['random_state'],
-                            dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    elif nmf_method == 'masked_segments':
-        (resp_signal, heart_signal), _ = \
-            nmf_masked_segments(audio_dwns, samplerate_des, hs_pos=y_out2, 
-                                interval_list=interval_list, 
-                                n_components=nmf_parameters['n_components'],
-                                N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
-                                N_fade=nmf_parameters['N_fade'], 
-                                noverlap=nmf_parameters['noverlap'], 
-                                repeat=nmf_parameters['repeat'], 
-                                padding=nmf_parameters['padding'], 
-                                window=nmf_parameters['window'],
-                                init=nmf_parameters['init'], 
-                                solver=nmf_parameters['solver'], 
-                                beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
-                                max_iter=nmf_parameters['max_iter'],
-                                alpha_nmf=nmf_parameters['alpha_nmf'], 
-                                l1_ratio=nmf_parameters['l1_ratio'], 
-                                random_state=nmf_parameters['random_state'],
-                                dec_criteria=nmf_parameters['dec_criteria'])
-    
-    
-    else:
-        raise Exception('Opción para el método de descomposición no '
-                        'válida.')
+                            nmf_parameters=nmf_parameters,
+                            filter_parameters=filter_parameters, 
+                            nmf_method=nmf_method)
     
     
     print('Separación de fuentes completada')

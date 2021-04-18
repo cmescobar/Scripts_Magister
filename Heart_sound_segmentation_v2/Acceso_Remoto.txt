@@ -85,15 +85,16 @@ scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/cnn_dnn_1_3-ge
 scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_7.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp Database_separation.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_1_4_all-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all.txt /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all.h5 /home/geduran/cmescobar/Paper_models/segnet_based_1_4_all_db.txt" ./Paper_models/segnet_based_1_4_all
-scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_12_10-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_12_10.txt /home/geduran/cmescobar/Paper_models/segnet_based_12_10.h5 /home/geduran/cmescobar/Paper_models/segnet_based_12_10_db.txt" ./Paper_models/segnet_based_12_10
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/segnet_based_2_23-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/segnet_based_2_23.txt /home/geduran/cmescobar/Paper_models/segnet_based_2_23.h5 /home/geduran/cmescobar/Paper_models/segnet_based_2_23_db.txt" ./Paper_models/segnet_based_2_23
 scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_8.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp descriptor_functions.py envelope_functions.py heart_sound_physionet_management.py hs_dnn_main_cross.py heart_sound_DNN_models.py paper_DNN_models.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Paper_models/definitive_segnet_based-get_model_data_params.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.txt /home/geduran/cmescobar/Paper_models/definitive_segnet_based.h5 /home/geduran/cmescobar/Paper_models/definitive_segnet_based_db.txt" ./Paper_models/definitive_segnet_based
 scp -r "Source_separation_main_v2" geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar
 scp main_2.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2
 virtualenv --relocatable env
-scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Source_separation_main_v2/Results/Register_on_segments.txt /home/geduran/cmescobar/Source_separation_main_v2/Results/Register_masked_segments.txt" .
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Source_separation_main_v2/Results/Register_on_segments.txt /home/geduran/cmescobar/Source_separation_main_v2/Results/Register_masked_segments.txt /home/geduran/cmescobar/Source_separation_main_v2/Results/Register_to_all.txt /home/geduran/cmescobar/Source_separation_main_v2/Results/Register_replace_segments.txt" .
 scp source_separation/nmf_decompositions.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/source_separation
 scp _beta_cardiorespiratory_database/Heart_Sounds/Interval_list_corrected.txt geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/_beta_cardiorespiratory_database/Heart_Sounds
 scp source_separation/fading_functions.py geduran@rfc2.ing.puc.cl:/home/geduran/cmescobar/Source_separation_main_v2/source_separation
 rm -r Source_separation_main_v2
+scp geduran@rfc2.ing.puc.cl:"/home/geduran/cmescobar/Source_separation_main_v2/Results/Register_replace_segments.txt" .

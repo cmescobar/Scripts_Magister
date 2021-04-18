@@ -773,7 +773,7 @@ def test_cnn_all_input():
 ## Módulo de testeo ##
 if __name__ == '__main__':
     # Definición de la función a aplciar
-    name_func = 'test_cnn_all_input'
+    name_func = 'test_model'
     
     
     if name_func == 'test_heart_sound':
@@ -794,3 +794,7 @@ if __name__ == '__main__':
 
     elif name_func == 'test_cnn_all_input':
         test_cnn_all_input()
+        
+    elif name_func == 'test_model':
+        model = tf.keras.models.load_model('Paper_models/2 - Descriptors/segnet_based_2_16/segnet_based_2_16.h5')
+        print(model.summary())

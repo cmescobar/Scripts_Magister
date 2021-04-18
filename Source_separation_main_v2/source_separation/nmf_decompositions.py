@@ -194,8 +194,8 @@ def nmf_to_all(signal_in, samplerate, hs_pos, interval_list, n_components=2, N=1
                noverlap=768, repeat=0, padding=0, window='hamming', init='random', 
                solver='mu', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0, 
                random_state=0, dec_criteria='vote'):
-    '''Función que permite obtener la descomposición NMF de una señal (ingresando su
-    ubicación en el ordenador), la cual descompone toda la señal.
+    '''Función que permite obtener la descomposición NMF de una señal descomponiendo 
+    la señal completa.
     
     Parameters
     ----------
@@ -256,9 +256,8 @@ def nmf_on_segments(signal_in, samplerate, interval_list, n_components=2,
                     repeat=0, window='hamming', alpha_wiener=1, init='random', 
                     solver='mu', beta=1, tol=1e-4, max_iter=200, alpha_nmf=0, 
                     l1_ratio=0, random_state=0, dec_criteria='vote'):
-    '''Función que permite obtener la descomposición NMF de una señal (ingresando su
-    ubicación en el ordenador), la cual solamente descompone los segmentos de interés
-    previamente etiquetados, uno a uno.
+    '''Función que permite obtener la descomposición NMF de una señal, la cual solamente 
+    descompone los segmentos de interés previamente etiquetados, uno a uno.
     
     Parameters
     ----------
@@ -364,9 +363,9 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
                         repeat=0, window='hamming', init='random', solver='mu', beta=1,
                         tol=1e-4, max_iter=200, alpha_nmf=0, l1_ratio=0,
                         random_state=0, dec_criteria='vote'):
-    '''Función que permite obtener la descomposición NMF de una señal (ingresando su
-    ubicación en el ordenador), la cual solamente descompone en segmentos de interés
-    previamente etiquetados, aplicando una máscara y descomponiendo la señal completa.
+    '''Función que permite obtener la descomposición NMF de una señal, la cual solamente 
+    descompone en segmentos de interés previamente etiquetados, aplicando una máscara y 
+    descomponiendo la señal completa.
     
     Parameters
     ----------
@@ -505,6 +504,90 @@ def nmf_masked_segments(signal_in, samplerate, interval_list, hs_pos, n_componen
     return (resp_signal, heart_signal), comps
 
 
+def nmf_replacing_segments(signal_in, samplerate, hs_pos, interval_list, n_components=2, 
+                           N=1024, N_lax=100, N_fade=100, noverlap=768, repeat=0, padding=0, 
+                           window='hamming', init='random', solver='mu', beta=1, tol=1e-4, 
+                           max_iter=200, alpha_nmf=0, l1_ratio=0, random_state=0, 
+                           dec_criteria='vote'):
+    '''Función que permite obtener la descomposición NMF de una señal completa y luego
+    cortar los segmentos de sonido respiratorio de interés en las posiciones de los
+    sonidos cardiacos.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+        Señal a descomponer.
+    samplerate : int
+        Tasa de muestreo de la señal.
+    n_components : int, optional
+        Cantidad de componentes a separar la señal. Por defecto es 2.
+    N : int, optional
+        Cantidad de puntos utilizados en cada ventana de la STFT. Por defecto es 2048.
+    noverlap : float, optional
+        Cantidad de puntos de traslape que existe entre una ventana y la siguiente al 
+        calcular la STFT. Por defecto es 1024.
+    padding : int, optional
+        Cantidad de ceros añadidos al final para aplicar zero padding. Por defecto es 0.
+    window : {None, 'hamming', 'hann', 'nutall', 'tukey'}, optional
+        Opciones para las ventanas a utilizar en el cálculo de cada segmento del STFT.
+        En caso de elegir None, se asume la ventana rectangular. Por defecto es 'hamming'.
+    alpha_wiener : int, optional
+        Exponente alpha del filtro de Wiener. Por defecto es 1.
+    filter_out : {None, 'wiener', 'binary'}, optional
+        Tipo de filtro utilizado para la reconstrucción de la señal. Si es None, se 
+        reconstruye directamente utilizando lo obtenido. Si es 'wiener', se aplica 
+        un filtro de Wiener. Si es 'binary' se aplica un filtro binario. Por defecto 
+        es 'wiener'.
+    **kwargs : Revisar nmf_decomposition para el resto.
+    
+    Returns
+    -------
+    (resp_signal, heart_signal) : tuple of ndarray
+        Señal respiratoria y cardiaca obtenida mediante la descomposición.
+    comps : list of ndarray
+        Lista que contiene ambas señales descompuestas mediante NMF.
+    '''
+    # Aplicando la segmentación nmf sobre la señal completa
+    (resp_comps, heart_signal), comps = \
+            nmf_to_all(signal_in, samplerate, hs_pos, interval_list, n_components=n_components, 
+                       N=N, N_lax=N_lax, noverlap=noverlap, repeat=repeat, padding=padding, 
+                       window=window, init=init, solver=solver, beta=beta, tol=tol, 
+                       max_iter=max_iter, alpha_nmf=alpha_nmf, l1_ratio=l1_ratio,
+                       random_state=random_state, dec_criteria=dec_criteria)
+    
+    # Definición de la señal respiratoria definitiva
+    resp_signal = np.copy(signal_in) 
+    
+    # Para conectarlas adecuadamente a la señal de interés
+    for interval in interval_list:
+        # Definición del límite inferior y superior
+        lower = interval[0] - N_lax
+        upper = interval[1] + N_lax            
+        
+        # Definición de la lista de señales a concatenar con fading para el corazón y 
+        # la respiración.
+        # Se usa una condición para asegurar problemas de borde inferior.
+        if lower <= 0:
+            resp_connect = [resp_comps[0:upper + N_fade]]
+        else:
+            # Condición para borde inferiror del segmento de interés.
+            if lower - N_fade <= 0:
+                resp_connect = [resp_signal[:lower], 
+                                resp_comps[0:upper + N_fade]]
+            else:
+                resp_connect = [resp_signal[:lower], 
+                                resp_comps[lower - N_fade:upper + N_fade]]
+        
+        # Y una condición para asegurar problemas de borde superior.
+        if not upper >= len(signal_in):
+            resp_connect.append(resp_signal[upper:])
+                
+        # Aplicando fading para cada uno
+        resp_signal = fade_connect_signals(resp_connect, N=N_fade, beta=1)
+    
+    return (resp_signal, heart_signal), comps
+
+
 def _clustering_criteria(signal_in, samplerate, W, H, comps, hs_pos,  
                          interval_list, N_lax, dec_criteria='vote'):
     '''Función que aplica los criterios de clasificación de las componentes
@@ -528,7 +611,8 @@ def _clustering_criteria(signal_in, samplerate, W, H, comps, hs_pos,
         Lista de intervalos de las posiciones de sonidos cardiacos.
     N_lax : int
         Cantidad de puntos adicionales que se consideran para cada lado más 
-        allá de los intervalos dados.
+        allá de los intervalos dados en el criterio espectral para definir
+        los sonidos respiratorios libres de sonido cardiaco.
     dec_criteria : {'or', 'vote', 'and', 'spec_criterion', 'energy_criterion',
                     'temp_criterion'}, optional
         Método para decidir a partir de los criterios. 'or' necesita que al
@@ -921,3 +1005,13 @@ def _no_masking(signal_in, W, H, S, k, N, noverlap, padding, repeat, window, who
             components.append(np.real(yi))
             
     return components, Y_list
+
+
+
+if __name__ == '__main__':
+    # Bodega de códigos
+    func_to = None
+    
+    if func_to == 'nmf_on_segments_plot':
+        #### Código de para graficar cada segmento
+        pass

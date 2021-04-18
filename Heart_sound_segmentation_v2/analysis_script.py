@@ -125,8 +125,8 @@ def get_architecture_results():
     #                'segnet_based_8_13']
     # experiments = ['segnet_based_9_1']
     # experiments = ['segnet_based_10_1', 'segnet_based_10_2']
-    experiments = ['segnet_based_11_1', 'segnet_based_11_2']
-    
+    # experiments = ['segnet_based_11_1', 'segnet_based_11_2']
+    experiments = ['segnet_based_2_22', 'segnet_based_2_23']    
     
     for exp in experiments:
         with open(f'Paper_models/{exp}/{exp}.txt', 'r', encoding='utf8') as file:
@@ -225,7 +225,6 @@ def get_crossval_results():
               f'{accuracy_test}, {recall_test}, {precision_test}')
 
 
-
 def get_qparams_network():
     '''Rutina para contar la cantidad de parámetros entrenables de una red'''
     # models = ['cnn_dnn_1_1', 'cnn_dnn_1_2', 'cnn_dnn_1_3', 'cnn_dnn_1_4']
@@ -273,10 +272,10 @@ def get_qparams_network():
         # print(model.summary())
         print(trainable_count)
             
-            
+  
 
 if __name__ == '__main__':
-    # get_architecture_results()
-    get_crossval_results()
+    get_architecture_results()
+    # get_crossval_results()
     # get_qparams_network()
     pass

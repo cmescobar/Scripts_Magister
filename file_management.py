@@ -1,7 +1,8 @@
-import os
+import os, shutil
 import numpy as np
 import soundfile as sf
 from ast import literal_eval
+
 
 DIAGNOSIS_CSV = 'Respiratory_Sound_Database/patient_diagnosis.csv'
 AUDIO_FILES = 'Respiratory_Sound_Database/audio_and_txt_files'
@@ -91,7 +92,7 @@ def get_dir_audiotxt_by_symptom(symptom, wav=True):
         return get_dir_audiotxt_by_id(id_list)
 
 
-def get_audio_folder_by_symptom(symptom, sep_type='all'):
+def get_audio_folder_by_symptom(main_folder, symptom, sep_type='all'):
     # Corroborar la opción de separación
     if sep_type not in ['all', 'tracheal', 'toracic']:
         print('The option is not valid. Please try again.')
@@ -104,7 +105,7 @@ def get_audio_folder_by_symptom(symptom, sep_type='all'):
     symptom_dirs = get_dir_audio_by_id(symptom_list)
 
     # Definición de la carpeta dónde se guardará la información
-    folder_data = f'Interest_Audios/{symptom}/{sep_type}'
+    folder_data = f'{main_folder}/{symptom}/{sep_type}'
     
     # Preguntar si es que la carpeta que almacenará los sonidos se ha
     # creado. En caso de que no exista, se crea una carpeta
@@ -132,6 +133,49 @@ def get_audio_folder_by_symptom(symptom, sep_type='all'):
         print(f"Re-writing file sound {i.split('/')[-1]}...")
         sf.write(folder_to_save, audio, samplerate, 'PCM_24')
         print("Re-writing complete!\n")
+
+
+def get_audio_folder_by_symptom_v2(main_folder, symptom):
+    # Obtener las id de los pacientes
+    symptom_list = get_patient_by_symptom(symptom)
+
+    # Luego obtener las direcciones de los archivos de audio para cada caso
+    symptom_dirs = get_dir_audio_by_id(symptom_list)
+
+    # Definición de la carpeta dónde se guardará la información
+    folder_data = f'{main_folder}/{symptom}'
+    
+    # Preguntar si es que la carpeta que almacenará los sonidos se ha
+    # creado. En caso de que no exista, se crea una carpeta
+    if not os.path.isdir(folder_data):
+        os.makedirs(folder_data)
+
+    # Lectura de cada uno de los archivos de audios para la reescritura
+    # normalizada del archivo de audio
+    for i in symptom_dirs:
+        # Control de nombres
+        pos_label = i.split('/')[-1].split('_')[2]
+        
+        if 'Tc' == pos_label:
+            print(f'Archivo ignorado: {i.split("/")[-1]}')
+            continue
+        
+        # Lectura del audio
+        audio, samplerate = sf.read(i)
+
+        # Normalizando al archivo de audio
+        audio /= max(abs(audio))
+
+        # Definición de la carpeta donde se guardará
+        folder_to_save = f"{folder_data}/{i.split('/')[-1]}"
+        
+        # Escribiendo
+        print(f"Re-writing file sound {i.split('/')[-1]}...")
+        sf.write(folder_to_save, audio, samplerate, 'PCM_24')
+        print("Re-writing complete!\n")
+        
+        # Guardando el archivo correspondiente
+        shutil.copyfile(src=f'{i[:-4]}.txt', dst=f"{folder_to_save[:-4]}.txt")
 
 
 def get_segmentation_points_by_filename(symptom, filename):
@@ -422,28 +466,29 @@ def get_heartbeat_points_created_db(filename):
 
 
 # Test module
-#a = get_heartbeat_points_created_db('Seed[47651]_S1[61]_S2[62]')
-#print(a)
-
-# get_labeled_heart_sound_files_heartbeatdb(record=True)
-# get_heart_sound_files_heartbeatdb()
-
-'''symptom = "Pneumonia"
-get_audio_folder_by_symptom(symptom, sep_type='all')
-get_audio_folder_by_symptom(symptom, sep_type='tracheal')
-get_audio_folder_by_symptom(symptom, sep_type='toracic')
-get_segmentation_points_by_filename("Healthy")'''
-# import matplotlib.pyplot as plt 
-# get_heart_sound_files()
-
-'''sep_types = ['all', 'tracheal', 'toracic']
-for i in sep_types:
-    get_audio_folder_by_symptom('URTI', sep_type=i)
-    get_audio_folder_by_symptom('Asthma', sep_type=i)
-    get_audio_folder_by_symptom('COPD', sep_type=i)
-    get_audio_folder_by_symptom('LRTI', sep_type=i)
-    get_audio_folder_by_symptom('Bronchiectasis', sep_type=i)
-    get_audio_folder_by_symptom('Bronchiolitis', sep_type=i)'''
+if __name__ == '__main__':
+    # Definición del nombre de la función
+    func_to = 'get_audio_folder_by_symptom'
     
-# get_heart_sound_by_presence(level=1)
+    if func_to == 'get_symptom_names':
+        symptoms = set()
+        
+        with open(DIAGNOSIS_CSV, 'r', encoding='utf8') as file:
+            for line in file:
+                # Obtención del síntoma
+                symptom_to = line.strip().split(',')[1]
+                symptoms.add(symptom_to)
+                
+        print(symptoms)
     
+    elif func_to == 'get_audio_folder_by_symptom':
+        folder_to = 'Interest_sounds'
+        
+        get_audio_folder_by_symptom_v2(folder_to, 'Healthy')
+        get_audio_folder_by_symptom_v2(folder_to, 'Pneumonia')
+        get_audio_folder_by_symptom_v2(folder_to, 'URTI')
+        get_audio_folder_by_symptom_v2(folder_to, 'Asthma')
+        get_audio_folder_by_symptom_v2(folder_to, 'LRTI')
+        get_audio_folder_by_symptom_v2(folder_to, 'Bronchiectasis')
+        get_audio_folder_by_symptom_v2(folder_to, 'Bronchiolitis')
+

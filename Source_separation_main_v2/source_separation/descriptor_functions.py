@@ -109,7 +109,7 @@ def abs_fourier_db_half(signal_in, samplerate, N_rep):
 
 # Otros
 def get_spectrogram(signal_in, samplerate, N=512, padding=0, repeat=0, noverlap=0, 
-                    window='tukey', whole=False):
+                    window='hann', whole=False):
     '''Función que permite obtener la STFT de una señal.
     
     Parameters

@@ -3,9 +3,12 @@ import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from heart_sound_segmentation.filter_and_sampling import downsampling_signal
-from heart_sound_segmentation.evaluation_functions import eval_sound_model, \
+from heart_sound_segmentation.filter_and_sampling import downsampling_signal,\
+    lowpass_filter, highpass_filter
+from heart_sound_segmentation.evaluation_functions import eval_sound_model,\
     eval_sound_model_db, class_representations
+from source_separation.nmf_decompositions import nmf_to_all, nmf_on_segments, \
+    nmf_masked_segments, nmf_replacing_segments
 
 
 def signal_segmentation_db(symptom, model_name, ausc_pos='toracic', priority=1,
@@ -307,6 +310,156 @@ def find_segments_limits(y_hat, segments_return='Non-Heart'):
         interval_list.append([beg_seg, hss_pos[-1]])
         
     return interval_list
+
+
+def nmf_process(signal_in, samplerate, hs_pos, interval_list, nmf_parameters,
+                filter_parameters, nmf_method='to_all'):
+    '''Función que permite realizar la descomposición NMF en base a los 
+    parámetros de interés a modificar.
+    
+    Parameters
+    ----------
+    signal_in : ndarray or list
+        Señal a descomponer.
+    samplerate : int
+        Tasa de muestreo de la señal.
+    hs_pos : ndarray
+        Señal binaria que indica las posiciones de los sonidos cardiacos.
+    interval_list : list
+        Lista con los intervalos donde se encuentran los sonidos cardiacos.
+    nmf_parameters : dict
+        Diccionario que contiene los parámetros de las funciones de 
+        descomposición NMF.
+    nmf_method : {'to_all', 'on_segments', 'masked_segments', 
+                  'replace_segments'}, optional
+        Método de descomposición NMF a aplicar en la separación
+        de fuentes. Por defecto es "to_all".
+    
+    Returns
+    -------
+    resp_signal : ndarray
+        Señal respiratoria obtenida mediante la descomposición.
+    heart_signal : ndarray
+        Señal cardíaca obtenida mediante la descomposición.
+    '''
+    # Si es que se decide descomponer únicamente la franja de baja frecuencia 
+    if filter_parameters['bool']:
+        # Señal de entrada
+        _, signal_to = \
+                lowpass_filter(signal_in, samplerate,
+                               freq_pass=filter_parameters['freq_pass'],
+                               freq_stop=filter_parameters['freq_stop'],
+                               normalize=False)
+        
+        # Señal a conectar con la respiración
+        _, signal_upper = \
+                highpass_filter(signal_in, samplerate, 
+                                freq_stop=filter_parameters['freq_pass'], 
+                                freq_pass=filter_parameters['freq_stop'],
+                                normalize=False)
+    else:
+        signal_to = signal_in
+    
+    # Aplicando la separación de fuentes
+    if nmf_method == 'to_all':
+        (resp_signal, heart_signal), _ = \
+            nmf_to_all(signal_to, samplerate, hs_pos=hs_pos, 
+                       interval_list=interval_list, 
+                       n_components=nmf_parameters['n_components'], 
+                       N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
+                       noverlap=nmf_parameters['noverlap'], 
+                       repeat=nmf_parameters['repeat'], 
+                       padding=nmf_parameters['padding'], 
+                       window=nmf_parameters['window'],
+                       init=nmf_parameters['init'], 
+                       solver=nmf_parameters['solver'], 
+                       beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                       max_iter=nmf_parameters['max_iter'],
+                       alpha_nmf=nmf_parameters['alpha_nmf'], 
+                       l1_ratio=nmf_parameters['l1_ratio'], 
+                       random_state=nmf_parameters['random_state'],
+                       dec_criteria=nmf_parameters['dec_criteria'])
+    
+    
+    elif nmf_method == 'on_segments':
+        resp_signal, heart_signal = \
+            nmf_on_segments(signal_to, samplerate, interval_list=interval_list, 
+                            n_components=nmf_parameters['n_components'],
+                            N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
+                            N_fade=nmf_parameters['N_fade'], 
+                            noverlap=nmf_parameters['noverlap'], 
+                            repeat=nmf_parameters['repeat'], 
+                            padding=nmf_parameters['padding'], 
+                            window=nmf_parameters['window'],
+                            init=nmf_parameters['init'], 
+                            solver=nmf_parameters['solver'], 
+                            beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                            max_iter=nmf_parameters['max_iter'],
+                            alpha_nmf=nmf_parameters['alpha_nmf'], 
+                            l1_ratio=nmf_parameters['l1_ratio'], 
+                            random_state=nmf_parameters['random_state'],
+                            dec_criteria=nmf_parameters['dec_criteria'])
+    
+    
+    elif nmf_method == 'masked_segments':
+        (resp_signal, heart_signal), _ = \
+            nmf_masked_segments(signal_to, samplerate, hs_pos=hs_pos, 
+                                interval_list=interval_list, 
+                                n_components=nmf_parameters['n_components'],
+                                N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'],  
+                                N_fade=nmf_parameters['N_fade'], 
+                                noverlap=nmf_parameters['noverlap'], 
+                                repeat=nmf_parameters['repeat'], 
+                                padding=nmf_parameters['padding'], 
+                                window=nmf_parameters['window'],
+                                init=nmf_parameters['init'], 
+                                solver=nmf_parameters['solver'], 
+                                beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                                max_iter=nmf_parameters['max_iter'],
+                                alpha_nmf=nmf_parameters['alpha_nmf'], 
+                                l1_ratio=nmf_parameters['l1_ratio'], 
+                                random_state=nmf_parameters['random_state'],
+                                dec_criteria=nmf_parameters['dec_criteria'])
+    
+    elif nmf_method == 'replace_segments':
+        (resp_signal, heart_signal), _ = \
+            nmf_replacing_segments(signal_to, samplerate, hs_pos=hs_pos, 
+                                   interval_list=interval_list, 
+                                   n_components=nmf_parameters['n_components'], 
+                                   N=nmf_parameters['N'], N_lax=nmf_parameters['N_lax'], 
+                                   noverlap=nmf_parameters['noverlap'], 
+                                   repeat=nmf_parameters['repeat'], 
+                                   padding=nmf_parameters['padding'], 
+                                   window=nmf_parameters['window'],
+                                   init=nmf_parameters['init'], 
+                                   solver=nmf_parameters['solver'], 
+                                   beta=nmf_parameters['beta'], tol=nmf_parameters['tol'], 
+                                   max_iter=nmf_parameters['max_iter'],
+                                   alpha_nmf=nmf_parameters['alpha_nmf'], 
+                                   l1_ratio=nmf_parameters['l1_ratio'], 
+                                   random_state=nmf_parameters['random_state'],
+                                   dec_criteria=nmf_parameters['dec_criteria'])
+    
+    # Si es que se filtró, se vuelve a conectar con la información de alta
+    # frecuencia. 
+    if filter_parameters['bool']: 
+        # Filtrando frecuencias altas
+        _, resp_signal = \
+                lowpass_filter(resp_signal, samplerate,
+                               freq_pass=filter_parameters['freq_pass'],
+                               freq_stop=filter_parameters['freq_stop'], 
+                               normalize=False)
+        _, heart_signal = \
+                lowpass_filter(heart_signal, samplerate,
+                               freq_pass=filter_parameters['freq_pass'],
+                               freq_stop=filter_parameters['freq_stop'], 
+                               normalize=False)
+    
+        # Conectar la señal respiratoria con la banda superior de la señal
+        resp_signal = resp_signal + signal_upper[:len(resp_signal)]
+    
+    return resp_signal, heart_signal
+
 
 
 

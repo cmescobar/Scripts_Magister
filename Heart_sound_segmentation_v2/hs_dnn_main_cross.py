@@ -29,7 +29,7 @@ from paper_DNN_models import cnn_dnn_1_1, cnn_dnn_1_2, segnet_based_1_1, segnet_
     segnet_based_7_1, segnet_based_7_2, segnet_based_7_3, segnet_based_7_4, segnet_based_7_5, \
     segnet_based_7_6, segnet_based_7_7, segnet_based_7_8, segnet_based_7_9, segnet_based_7_10, \
     segnet_based_8_x, segnet_based_9_x, segnet_based_10_1, segnet_based_10_2, segnet_based_11_1, \
-    segnet_based_11_2, segnet_based_12_x, definitive_segnet_based
+    segnet_based_11_2, segnet_based_12_x, definitive_segnet_based, segnet_based_2_22, segnet_based_2_23
 from heart_sound_physionet_management import get_model_data, get_model_data_idxs, \
     get_model_data_idxs_2, get_training_weights
 
@@ -110,7 +110,8 @@ def model_train_iteration(model, model_name, index_list, epoch_train):
                       'segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
                       'segnet_based_12_4', 'segnet_based_12_5', 'segnet_based_12_6',
                       'segnet_based_12_7', 'segnet_based_12_8', 'segnet_based_12_9',
-                      'segnet_based_12_10', 'definitive_segnet_based']:
+                      'segnet_based_12_10', 'definitive_segnet_based', 'segnet_based_2_22',
+                      'segnet_based_2_23']:
         print('\nTraining time\n------------\n')
         # Definición de las etiquetas de entrenamiento
         y1 = Y_train[:, :, 0]
@@ -351,7 +352,8 @@ def model_bigbatch_evaluation(model, model_name, index_list, epoch, type_op):
                       'segnet_based_12_1', 'segnet_based_12_2', 'segnet_based_12_3',
                       'segnet_based_12_4', 'segnet_based_12_5', 'segnet_based_12_6',
                       'segnet_based_12_7', 'segnet_based_12_8', 'segnet_based_12_9',
-                      'segnet_based_12_10', 'definitive_segnet_based']:
+                      'segnet_based_12_10', 'definitive_segnet_based', 'segnet_based_2_22',
+                      'segnet_based_2_23']:
         print(to_print)
         # Definición de las etiquetas de testeo
         y1 = Y_data[:, :, 0]
@@ -484,7 +486,7 @@ filepath_to_save = 'Paper_models'
 
 # Parámetros de get_model_data
 snr_list = []
-big_batch_size = 160 // 4
+big_batch_size = 160 #// 4
 padding_value = 2
 
 # Definición de los largos de cada ventana
@@ -504,7 +506,7 @@ bp_parameters = [20, 30, 180, 190]
 validation_split = 0.1
 batch_size = 70
 epochs = 20
-model_name = 'definitive_segnet_based'
+model_name = 'segnet_based_2_23'
 
 # Parámetros de la función objetivo
 optimizer = 'Adam'
@@ -1202,12 +1204,55 @@ elif model_name == 'segnet_based_2_21':
     hilbert_dict = {'analytic_env': True, 'analytic_env_mod': True, 
                     'inst_phase': False, 'inst_freq': False}
     simplicity_dict = None
-    vfd_dict = vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
-                           'step_size_method': 'unit', 'inverse': True}
+    vfd_dict = {'N': N_env_vfd, 'noverlap': N_env_vfd - step_env_vfd, 'kmin': 4, 'kmax': 4, 
+                'step_size_method': 'unit', 'inverse': True}
     multiscale_wavelet_dict = {'wavelet': 'db6', 'levels': [4,5], 'start_level': 0, 'end_level': 4}
     spec_track_dict =  {'freq_obj': [40, 60], 'N': N_env_spec, 
                         'noverlap': N_env_spec - step_env_spec, 
                         'padding': 0, 'repeat': 0, 'window': 'hann'}
+    spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
+                        'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
+                        'repeat': 0 , 'window': 'hann'}
+    wavelet_dict = {'wavelet': 'db6', 'levels': [4], 'start_level': 0, 'end_level': 4}
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_22':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = True
+    append_envelopes = True
+    homomorphic_dict = None
+    hilbert_dict = None
+    simplicity_dict = None
+    vfd_dict = None
+    multiscale_wavelet_dict = None
+    spec_track_dict =  None
+    spec_energy_dict = None
+    wavelet_dict = None
+    append_fft = False
+
+
+elif model_name == 'segnet_based_2_23':
+    # Definición de las ventanas a revisar
+    N = 1024
+    step = 64
+    activation_percentage = None
+    
+    # Parámetros de envolvente
+    append_audio = False
+    append_envelopes = True
+    homomorphic_dict = {'cutoff_freq': 10, 'delta_band': 5}
+    hilbert_dict = {'analytic_env': True, 'analytic_env_mod': False, 'inst_phase': False, 
+                    'inst_freq': False}
+    simplicity_dict = None
+    vfd_dict = None
+    multiscale_wavelet_dict = None
+    spec_track_dict = None
     spec_energy_dict = {'band_limits': [30, 120], 'alpha': 1, 'N': N_env_energy, 
                         'noverlap': N_env_energy - step_env_energy, 'padding': 0, 
                         'repeat': 0 , 'window': 'hann'}
@@ -2032,6 +2077,14 @@ elif model_name in ['segnet_based_2_20']:
 elif model_name in ['segnet_based_2_21']:
     model = segnet_based_2_21(input_shape=(X_train.shape[1], X_train.shape[2]),
                               padding_value=padding_value, name=model_name)
+    
+elif model_name in ['segnet_based_2_22']:
+    model = segnet_based_2_22(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
+
+elif model_name in ['segnet_based_2_23']:
+    model = segnet_based_2_23(input_shape=(X_train.shape[1], X_train.shape[2]),
+                              padding_value=padding_value, name=model_name)
 
 elif model_name in ['segnet_based_3_1']:
     model = segnet_based_3_1(input_shape=(X_train.shape[1], X_train.shape[2]),
@@ -2288,7 +2341,8 @@ elif model_name in ['Model_2_9', 'Model_3', 'Model_6_1', 'Model_6_1_noised', 'Mo
                     'segnet_based_11_2', 'segnet_based_12_1', 'segnet_based_12_2', 
                     'segnet_based_12_3', 'segnet_based_12_4', 'segnet_based_12_5', 
                     'segnet_based_12_6', 'segnet_based_12_7', 'segnet_based_12_8', 
-                    'segnet_based_12_9', 'segnet_based_12_10', 'definitive_segnet_based']:
+                    'segnet_based_12_9', 'segnet_based_12_10', 'definitive_segnet_based',
+                    'segnet_based_2_22', 'segnet_based_2_23']:
     loss_model = loss_func
 
 
@@ -2357,6 +2411,6 @@ for epoch in range(epochs):
 ############# Testeando #############
 if model_name not in ['definitive_segnet_based']:
     model_bigbatch_evaluation(model, model_name, index_list=test_list, epoch=epoch, 
-                            type_op='test')
+                              type_op='test')
 else:
     print("\n¡Felicidades! Su red está completa.\n")

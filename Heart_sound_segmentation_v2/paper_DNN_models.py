@@ -628,7 +628,7 @@ def segnet_based_1_1_all(input_shape, padding_value, name=None):
         encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
     '''
     def _conv_bn_act_layer(input_layer, filters, kernel_size, padding,
-                          kernel_initializer, name):
+                           kernel_initializer, name):
         '''Función auxiliar que modela las capas azules conv + batchnorm +
         Activation ReLU para realizar el ENCODING.'''
         # Aplicando la concatenación de capas
@@ -1797,6 +1797,57 @@ def segnet_based_2_21(input_shape, padding_value, name=None):
     - Envolvente de Hilbert clásica
     - DWT
     - Multiscale Wavelet Product
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    return segnet_based_1_1_all(input_shape, padding_value, name=name)
+
+
+def segnet_based_2_22(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Señal raw
+    
+    Salida de 3 etiquetas:
+    - S1
+    - S2
+    - None
+    
+    References
+    ----------
+    [1] Badrinarayanan, V., Kendall, A., & Cipolla, R. (2017). 
+        Segnet: A deep convolutional encoder-decoder architecture for 
+        image segmentation. IEEE transactions on pattern analysis and 
+        machine intelligence, 39(12), 2481-2495.
+    [2] Ye, J. C., & Sung, W. K. (2019). Understanding geometry of 
+        encoder-decoder CNNs. arXiv preprint arXiv:1901.07647.
+    '''
+    return segnet_based_1_1_all(input_shape, padding_value, name=name)
+
+
+def segnet_based_2_23(input_shape, padding_value, name=None):
+    '''CNN basada en arquitectura encoder-decoder basada en SegNet.
+    Se utiliza el mismo canal para todas las envolventes.
+    
+    Envolventes usadas:
+    - Filtros homomórficos
+    - Envolvente de Hilbert
+    - DWT
+    - Energy envolve
     
     Salida de 3 etiquetas:
     - S1

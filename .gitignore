@@ -4,6 +4,7 @@ __pycache__/
 .vscode/
 Features_Extracted/
 Interest_Audios/
+Interest_sounds/
 Matlab tests/
 Respiratory_Sound_Database/
 Results/
@@ -55,5 +56,8 @@ Source_separation_main/Database_manufacturing
 Source_separation_main_v2/_beta_cardiorespiratory_database/Heart_Resp_Sounds
 
 # Sonidos en el sistema completo
-Classification system/cardiorespiratory_database
-Classification system/_temp_files/
+Classification_system/cardiorespiratory_database
+Classification_system/_temp_files/
+Classification_system/Interest_sounds
+Classification_system/preprocessed_signals_OLD
+Classification_system/preprocessed_signals

@@ -766,7 +766,10 @@ def test_cnn_all_input():
                 metrics=metrics, loss_weights=loss_weights)
     
     model.fit(x=audios_padded, y=y_to, epochs=10, batch_size=70, verbose=1, validation_split=0.1)
-    
+
+
+def testing_cnn():
+    pass
     
 
 

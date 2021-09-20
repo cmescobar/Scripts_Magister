@@ -1,5 +1,5 @@
 from testing_functions import test_hss
-from process_functions import preprocessing_audio
+from process_functions import preprocessing_audio_db, preprocessing_audio
 
 
 if __name__ == '__main__':

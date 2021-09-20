@@ -497,7 +497,7 @@ def _p_percentage_energy(signal_in, percentage=0.85):
     # energía total, se retorna ese primer punto que ya cumple el
     # criterio
     for i in range(len(signal_in)):
-        if np.sum(abs(signal_in[:i] ** 2)) >= 0.85 * total_energy:
+        if np.sum(abs(signal_in[:i] ** 2)) >= percentage * total_energy:
             return i
 
 

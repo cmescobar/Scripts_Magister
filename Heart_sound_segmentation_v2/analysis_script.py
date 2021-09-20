@@ -271,7 +271,9 @@ def get_qparams_network():
         
         # print(model.summary())
         print(trainable_count)
-            
+
+
+
   
 
 if __name__ == '__main__':
